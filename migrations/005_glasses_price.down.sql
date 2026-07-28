@@ -1,0 +1,1 @@
+ALTER TABLE glasses DROP COLUMN IF EXISTS price;
