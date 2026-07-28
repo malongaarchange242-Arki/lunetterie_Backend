@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"mime/multipart"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -42,7 +43,7 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 		return
 	}
 
-	// Récupérer le fichier image
+	// Récupérer la photo de la monture
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
 		shared.BadRequest(c, "Image requise")
@@ -57,8 +58,15 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 		return
 	}
 
+	// Récupérer la photo de la branche (optionnelle)
+	var brancheFile multipart.File
+	if bFile, _, err := c.Request.FormFile("branche_image"); err == nil {
+		brancheFile = bFile
+		defer brancheFile.Close()
+	}
+
 	// Exécuter le workflow
-	result, err := h.workflow.Execute(req, file, userID)
+	result, err := h.workflow.Execute(req, file, brancheFile, userID)
 	if err != nil {
 		shared.InternalError(c, "Erreur lors de la réception: "+err.Error())
 		return

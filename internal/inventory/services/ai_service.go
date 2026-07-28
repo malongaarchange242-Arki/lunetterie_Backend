@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 
 	"github.com/lunetterie/backend/internal/inventory/dto"
@@ -25,20 +26,20 @@ func NewAIService(baseURL string) *AIService {
 
 // rawAnalysisResponse reflète le schéma AnalysisResponse du service Python (app/schemas/analysis.py)
 type rawAnalysisResponse struct {
-	Shape                string   `json:"shape"`
-	ShapeConfidence      float64  `json:"shape_confidence"`
-	Color                string   `json:"color"`
-	ColorConfidence      float64  `json:"color_confidence"`
-	Material             string   `json:"material"`
-	MaterialConfidence   float64  `json:"material_confidence"`
-	MountType            string   `json:"mount_type"`
-	MountTypeConfidence  float64  `json:"mount_type_confidence"`
-	Gender               *string  `json:"gender"`
-	Brand                *string  `json:"brand"`
-	Reference             *string `json:"reference"`
-	Size                 *string  `json:"size"`
-	ModelVersion         string   `json:"model_version"`
-	ProcessingTimeMs     float64  `json:"processing_time_ms"`
+	Shape               string  `json:"shape"`
+	ShapeConfidence     float64 `json:"shape_confidence"`
+	Color               string  `json:"color"`
+	ColorConfidence     float64 `json:"color_confidence"`
+	Material            string  `json:"material"`
+	MaterialConfidence  float64 `json:"material_confidence"`
+	MountType           string  `json:"mount_type"`
+	MountTypeConfidence float64 `json:"mount_type_confidence"`
+	Gender              *string `json:"gender"`
+	Brand               *string `json:"brand"`
+	Reference           *string `json:"reference"`
+	Size                *string `json:"size"`
+	ModelVersion        string  `json:"model_version"`
+	ProcessingTimeMs    float64 `json:"processing_time_ms"`
 }
 
 var shapeTranslation = map[string]string{
@@ -74,11 +75,11 @@ var materialTranslation = map[string]string{
 }
 
 var mountTypeTranslation = map[string]string{
-	"pleine":        "Pleine monture",
-	"semi-cerclée":  "Semi-cerclée",
-	"semi-cerclee":  "Semi-cerclée",
-	"percée":        "Percée",
-	"percee":        "Percée",
+	"pleine":       "Pleine monture",
+	"semi-cerclée": "Semi-cerclée",
+	"semi-cerclee": "Semi-cerclée",
+	"percée":       "Percée",
+	"percee":       "Percée",
 }
 
 func translate(table map[string]string, raw string) string {
@@ -92,11 +93,16 @@ func translate(table map[string]string, raw string) string {
 }
 
 // Analyze envoie une image au service IA et traduit le résultat pour l'UI (labels français)
-func (s *AIService) Analyze(imageBytes []byte, filename string) (*dto.AnalysisResult, error) {
+func (s *AIService) Analyze(imageBytes []byte, filename string, contentType string) (*dto.AnalysisResult, error) {
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
 
-	part, err := writer.CreateFormFile("file", filename)
+	// CreateFormFile fixe toujours Content-Type: application/octet-stream, ce que le service
+	// Python rejette (il exige un type MIME "image/...") : on construit la part manuellement.
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+	header.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(header)
 	if err != nil {
 		return nil, fmt.Errorf("erreur création form: %w", err)
 	}

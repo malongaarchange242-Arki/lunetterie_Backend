@@ -23,16 +23,16 @@ type TransferItemResponse struct {
 
 // TransferResponse représente un transfert
 type TransferResponse struct {
-	ID            int64                   `json:"id"`
-	FromStationID int64                   `json:"from_station_id"`
-	ToStationID   int64                   `json:"to_station_id"`
-	Status        string                  `json:"status"`
-	CreatedBy     int64                   `json:"created_by"`
-	ReceivedBy    *int64                  `json:"received_by,omitempty"`
-	Notes         *string                 `json:"notes,omitempty"`
-	CreatedAt     string                  `json:"created_at"`
-	ReceivedAt    *string                 `json:"received_at,omitempty"`
-	Items         []TransferItemResponse  `json:"items,omitempty"`
+	ID            int64                  `json:"id"`
+	FromStationID int64                  `json:"from_station_id"`
+	ToStationID   int64                  `json:"to_station_id"`
+	Status        string                 `json:"status"`
+	CreatedBy     int64                  `json:"created_by"`
+	ReceivedBy    *int64                 `json:"received_by,omitempty"`
+	Notes         *string                `json:"notes,omitempty"`
+	CreatedAt     string                 `json:"created_at"`
+	ReceivedAt    *string                `json:"received_at,omitempty"`
+	Items         []TransferItemResponse `json:"items,omitempty"`
 }
 
 // ReceiveTransferItemResponse représente le résultat de la réception d'une monture

@@ -92,6 +92,8 @@ func main() {
 	authSvc := authServices.NewAuthService(os.Getenv("JWT_SECRET"))
 	webauthnSvc := authServices.NewWebAuthnService(webauthnRepo, userRepo)
 	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc)
+	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
+	aiSvc := services.NewAIService(aiServiceURL)
 
 	// Initialiser les workflows
 	receptionWorkflow := workflows.NewReceptionWorkflow(
@@ -99,16 +101,17 @@ func main() {
 		movementSvc,
 		barcodeSvc,
 		analysisSvc,
+		storageSvc,
 		glassRepo,
 		locationRepo,
 		analysisRepo,
-		aiServiceURL,
 	)
 
 	// Initialiser les handlers
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
+	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
 
@@ -214,6 +217,7 @@ func main() {
 		inventory.Use(authMiddleware.RequireAuth(authSvc))
 		{
 			inventory.POST("/reception", receptionHandler.HandleReception)
+			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
 			storage := inventory.Group("/storage")
 			{
 				storage.POST("/generate", storageGeneratorHandler.GenerateLocations)
