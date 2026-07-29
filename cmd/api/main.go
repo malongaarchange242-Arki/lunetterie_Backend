@@ -118,17 +118,6 @@ func main() {
 	// Créer le router Gin
 	router := gin.Default()
 
-	// Forcer le domaine localhost:8080 pour WebAuthn
-	router.Use(func(c *gin.Context) {
-		// Rediriger 127.0.0.1 vers localhost (important pour WebAuthn)
-		if c.Request.Host == "127.0.0.1:"+port {
-			c.Redirect(http.StatusMovedPermanently, "http://localhost:"+port+c.Request.URL.Path)
-			c.Abort()
-			return
-		}
-		c.Next()
-	})
-
 	// CORS pour tests local
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
