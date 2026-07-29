@@ -66,7 +66,12 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 	}
 
 	// Exécuter le workflow
-	result, err := h.workflow.Execute(req, file, brancheFile, userID)
+	result, err := h.workflow.Execute(
+		req,
+		file,
+		brancheFile,
+		userID,
+	)
 	if err != nil {
 		shared.InternalError(c, "Erreur lors de la réception: "+err.Error())
 		return
