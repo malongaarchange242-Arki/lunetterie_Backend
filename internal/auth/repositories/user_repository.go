@@ -17,10 +17,11 @@ func NewUserRepository(db *sqlx.DB) *UserRepository {
 
 func (r *UserRepository) FindByFingerprint(fingerprintHash string) (*models.User, error) {
 	user := models.User{}
-	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, u.is_active, u.last_login, u.created_at, u.updated_at,
+	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, s.name AS station_name, u.is_active, u.last_login, u.created_at, u.updated_at,
 		EXISTS(SELECT 1 FROM webauthn_credentials wc WHERE wc.user_id = u.id) AS webauthn_registered
 		FROM users u
 		LEFT JOIN roles r ON u.role_id = r.id
+		LEFT JOIN stations s ON u.station_id = s.id
 		WHERE u.fingerprint_hash = $1 AND u.is_active = true`
 	if err := r.db.Get(&user, query, fingerprintHash); err != nil {
 		return nil, fmt.Errorf("utilisateur non trouvé: %w", err)
@@ -35,10 +36,11 @@ func (r *UserRepository) CreateFingerprintUser(user *models.User) error {
 
 func (r *UserRepository) FindByID(id int64) (*models.User, error) {
 	user := models.User{}
-	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, u.is_active, u.last_login, u.created_at, u.updated_at,
+	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, s.name AS station_name, u.is_active, u.last_login, u.created_at, u.updated_at,
 		EXISTS(SELECT 1 FROM webauthn_credentials wc WHERE wc.user_id = u.id) AS webauthn_registered
 		FROM users u
 		LEFT JOIN roles r ON u.role_id = r.id
+		LEFT JOIN stations s ON u.station_id = s.id
 		WHERE u.id = $1`
 	if err := r.db.Get(&user, query, id); err != nil {
 		return nil, fmt.Errorf("utilisateur non trouvé: %w", err)
@@ -48,11 +50,12 @@ func (r *UserRepository) FindByID(id int64) (*models.User, error) {
 
 func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 	user := models.User{}
-	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.password_hash, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, u.is_active, u.last_login, u.created_at, u.updated_at,
+	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.password_hash, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, s.name AS station_name, u.is_active, u.last_login, u.created_at, u.updated_at,
 		(u.password_hash IS NOT NULL) AS has_password,
 		EXISTS(SELECT 1 FROM webauthn_credentials wc WHERE wc.user_id = u.id) AS webauthn_registered
 		FROM users u
 		LEFT JOIN roles r ON u.role_id = r.id
+		LEFT JOIN stations s ON u.station_id = s.id
 		WHERE u.email = $1`
 	if err := r.db.Get(&user, query, email); err != nil {
 		return nil, fmt.Errorf("utilisateur non trouvé: %w", err)
@@ -74,11 +77,12 @@ func (r *UserRepository) SetPassword(userID int64, passwordHash string) error {
 
 func (r *UserRepository) FindAll() ([]models.User, error) {
 	users := []models.User{}
-	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, u.is_active, u.last_login, u.created_at, u.updated_at,
+	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, s.name AS station_name, u.is_active, u.last_login, u.created_at, u.updated_at,
 		(u.password_hash IS NOT NULL) AS has_password,
 		EXISTS(SELECT 1 FROM webauthn_credentials wc WHERE wc.user_id = u.id) AS webauthn_registered
 		FROM users u
 		LEFT JOIN roles r ON u.role_id = r.id
+		LEFT JOIN stations s ON u.station_id = s.id
 		ORDER BY u.created_at DESC`
 	if err := r.db.Select(&users, query); err != nil {
 		return nil, fmt.Errorf("impossible de récupérer les utilisateurs: %w", err)

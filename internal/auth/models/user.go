@@ -17,6 +17,7 @@ type User struct {
 	RoleID                 int64      `db:"role_id" json:"role_id"`
 	RoleName               string     `db:"role_name" json:"role_name,omitempty"`
 	StationID              *int64     `db:"station_id" json:"station_id,omitempty"`
+	StationName            *string    `db:"station_name" json:"station_name,omitempty"`
 	IsActive               bool       `db:"is_active" json:"is_active"`
 	LastLogin              *time.Time `db:"last_login" json:"last_login,omitempty"`
 	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
