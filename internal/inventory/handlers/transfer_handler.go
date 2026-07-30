@@ -218,7 +218,8 @@ func (h *TransferHandler) ListTransfers(c *gin.Context) {
 
 	resp := make([]dto.TransferResponse, 0, len(transfers))
 	for _, t := range transfers {
-		resp = append(resp, toTransferResponse(&t, nil, h.glassRepo))
+		items, _ := h.service.ListItems(t.ID)
+		resp = append(resp, toTransferResponse(&t, items, h.glassRepo))
 	}
 	shared.Success(c, 200, resp)
 }

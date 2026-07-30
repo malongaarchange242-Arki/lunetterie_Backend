@@ -143,6 +143,8 @@ func main() {
 	router.StaticFile("/scan.html", filepath.Join(frontendDir, "scan.html"))
 	router.StaticFile("/scan.css", filepath.Join(frontendDir, "scan.css"))
 	router.StaticFile("/scan.js", filepath.Join(frontendDir, "scan.js"))
+	router.StaticFile("/reception.html", filepath.Join(frontendDir, "reception.html"))
+	router.StaticFile("/reception.js", filepath.Join(frontendDir, "reception.js"))
 
 	// Servi via c.Data (pas c.File/StaticFile, qui passent par http.ServeFile) : net/http
 	// redirige spécialement toute URL se terminant par "/index.html" vers "./", ce qui

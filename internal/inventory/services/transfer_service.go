@@ -222,6 +222,10 @@ func (s *TransferService) ReceiveItem(transferID int64, barcode string, userID i
 }
 
 // GetTransfer récupère un transfert avec ses montures
+func (s *TransferService) ListItems(transferID int64) ([]models.TransferItem, error) {
+	return s.transferRepo.ListItems(transferID)
+}
+
 func (s *TransferService) GetTransfer(id int64) (*models.Transfer, []models.TransferItem, error) {
 	transfer, err := s.transferRepo.GetByID(id)
 	if err != nil {
