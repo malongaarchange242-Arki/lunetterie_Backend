@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
@@ -38,8 +39,8 @@ var placeableStatuses = map[models.GlassStatus]bool{
 // zone présentoir de ce poste (le code-barres est conservé tel quel). Si elle se trouvait sur
 // un autre poste, elle y est rattachée directement — le scan vaut confirmation physique de sa
 // présence sur le présentoir. Si elle est déjà exposée à ce poste, ou dans un statut non
-// éligible (réservée, vendue...), l'appel est un no-op silencieux : la recherche reste alors une
-// simple consultation.
+// éligible (réservée, vendue...), l'appel est un no-op : la recherche reste alors une simple
+// consultation.
 //
 // Cas EN_TRANSIT (monture envoyée par transfert, ex: depuis scan.html) :
 //   - Vers le Laboratoire : le scan vaut à la fois réception et mise en labo, en une seule action
@@ -50,30 +51,34 @@ var placeableStatuses = map[models.GlassStatus]bool{
 //     distincte, déclenchée par un scan ultérieur une fois la monture déjà en stock local (elle
 //     devient alors éligible via placeableStatuses, comme n'importe quelle monture en stock).
 //
-// Scanner depuis une station qui n'est pas la destination du transfert reste un no-op.
-func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64) error {
+// Le retour (string, error) renvoie en 2e position une erreur réelle (ex: monture introuvable),
+// et en 1re position une note explicative facultative quand l'appel n'a rien changé (ex: "en
+// transit vers un autre poste") — utile pour comprendre depuis l'UI pourquoi un scan n'a aucun
+// effet, plutôt que d'échouer en silence.
+func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64) (string, error) {
 	glass, err := s.glassRepo.GetByBarcode(barcode)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if glass.StationID == stationID && (glass.Status == models.StatusEnPresentoir || glass.Status == models.StatusEnLaboratoire) {
-		return nil
+		return "", nil
 	}
 
 	if glass.Status == models.StatusEnTransit {
 		if s.isLaboratoireStation(stationID) {
-			return s.placeGlass(glass, stationID, userID)
+			return "", s.placeGlass(glass, stationID, userID)
 		}
-		if !s.completeTransferReception(glass.ID, stationID, userID) {
-			return nil
+		note, ok := s.completeTransferReception(glass.ID, stationID, userID)
+		if !ok {
+			return note, nil
 		}
-		return s.receiveIntoLocalStock(glass, stationID, userID)
+		return "", s.receiveIntoLocalStock(glass, stationID, userID)
 	}
 
 	if !placeableStatuses[glass.Status] {
-		return nil
+		return fmt.Sprintf("Statut actuel « %s » : cette monture ne peut pas être placée sur le présentoir depuis ce statut.", glass.Status), nil
 	}
-	return s.placeGlass(glass, stationID, userID)
+	return "", s.placeGlass(glass, stationID, userID)
 }
 
 // receiveIntoLocalStock fait atterrir une monture reçue par transfert dans le stock local de la
@@ -162,38 +167,50 @@ func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64
 }
 
 // completeTransferReception clôture la réception du transfert actif d'une monture, si la
-// station scannée correspond bien à la destination du transfert. Renvoie false sans effet
-// si la monture n'a pas de transfert actif vers cette station.
-func (s *DisplayService) completeTransferReception(glassID, stationID, userID int64) bool {
+// station scannée correspond bien à la destination du transfert. Renvoie (note, false) sans
+// effet si la monture n'a pas de transfert actif vers cette station, la note expliquant pourquoi.
+func (s *DisplayService) completeTransferReception(glassID, stationID, userID int64) (string, bool) {
 	if s.transferRepo == nil {
-		return false
+		return "Réception de transfert indisponible (service non configuré).", false
 	}
 
 	item, err := s.transferRepo.GetActiveItemByGlassID(glassID)
 	if err != nil {
-		return false
+		return "Cette monture est marquée EN_TRANSIT mais aucune ligne de transfert active n'a été trouvée pour elle (transfert jamais expédié, ou déjà reçu ?).", false
 	}
 	transfer, err := s.transferRepo.GetByID(item.TransferID)
-	if err != nil || transfer.ToStationID != stationID {
-		return false
+	if err != nil {
+		return "Le transfert associé à cette monture est introuvable.", false
+	}
+	if transfer.ToStationID != stationID {
+		return fmt.Sprintf("Cette monture est en transit vers %s (station #%d), pas vers ce poste-ci : impossible de la réceptionner ici.", s.stationDisplayName(transfer.ToStationID), transfer.ToStationID), false
 	}
 
 	if err := s.transferRepo.MarkItemReceived(item.ID); err != nil {
 		log.Printf("⚠️  Erreur clôture ligne de transfert (item #%d): %v", item.ID, err)
-		return false
+		return "Erreur lors de la clôture du transfert.", false
 	}
 
 	remaining, err := s.transferRepo.CountItemsNotReceived(transfer.ID)
 	if err != nil {
 		log.Printf("⚠️  Erreur comptage montures restantes (transfert #%d): %v", transfer.ID, err)
-		return true
+		return "", true
 	}
 	if remaining == 0 {
 		if err := s.transferRepo.MarkReceived(transfer.ID, userID); err != nil {
 			log.Printf("⚠️  Erreur clôture transfert #%d: %v", transfer.ID, err)
 		}
 	}
-	return true
+	return "", true
+}
+
+func (s *DisplayService) stationDisplayName(stationID int64) string {
+	if s.stationRepo != nil {
+		if station, err := s.stationRepo.GetByID(stationID); err == nil {
+			return station.Name
+		}
+	}
+	return fmt.Sprintf("la station #%d", stationID)
 }
 
 func (s *DisplayService) isLaboratoireStation(stationID int64) bool {

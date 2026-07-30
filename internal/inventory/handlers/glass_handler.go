@@ -73,6 +73,7 @@ func (h *GlassHandler) GetStockSummary(c *gin.Context) {
 func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 	barcode := c.Param("barcode")
 
+	var placementNote string
 	if stationIDStr := c.Query("station_id"); stationIDStr != "" {
 		stationID, err := strconv.ParseInt(stationIDStr, 10, 64)
 		if err != nil {
@@ -83,10 +84,12 @@ func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 		if !ok {
 			return
 		}
-		if err := h.display.PlaceOnDisplay(barcode, stationID, userID); err != nil {
+		note, err := h.display.PlaceOnDisplay(barcode, stationID, userID)
+		if err != nil {
 			shared.NotFound(c, "Aucune monture ne correspond à ce code-barres")
 			return
 		}
+		placementNote = note
 	}
 
 	glass, err := h.repo.FindDetailByBarcode(barcode)
@@ -95,5 +98,9 @@ func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 		return
 	}
 
-	shared.Success(c, http.StatusOK, gin.H{"glass": glass})
+	response := gin.H{"glass": glass}
+	if placementNote != "" {
+		response["placement_note"] = placementNote
+	}
+	shared.Success(c, http.StatusOK, response)
 }
