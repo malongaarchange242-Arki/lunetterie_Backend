@@ -81,6 +81,7 @@ func main() {
 	movementRepo := repositories.NewMovementRepository(db)
 	transferRepo := repositories.NewTransferRepository(db)
 	userRepo := authRepositories.NewUserRepository(db)
+	stationRepo := authRepositories.NewStationRepository(db)
 	webauthnRepo := authRepositories.NewWebAuthnRepository(db)
 
 	// Initialiser les services
@@ -112,7 +113,7 @@ func main() {
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
-	authHandler := authHandlers.NewAuthHandler(userRepo, authSvc, webauthnSvc)
+	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
 
 	// Créer le router Gin
@@ -197,8 +198,11 @@ func main() {
 			auth.POST("/register", authHandler.RegisterUser)
 			auth.POST("/register-fingerprint", authHandler.RegisterFingerprintUser)
 			auth.POST("/login-fingerprint", authHandler.LoginWithFingerprint)
+			auth.POST("/login", authHandler.LoginWithPassword)
+			auth.POST("/set-password", authHandler.SetInitialPassword)
 			auth.GET("/users", authHandler.ListUsers)
 			auth.POST("/users", authHandler.CreateUser)
+			auth.GET("/stations", authHandler.ListStations)
 		}
 
 		// Routes inventaire
