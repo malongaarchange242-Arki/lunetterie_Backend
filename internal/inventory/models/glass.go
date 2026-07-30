@@ -44,6 +44,18 @@ type GlassListItem struct {
 	PhotoBrancheURL *string  `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
 }
 
+// StockSummaryItem représente le stock actif (hors vendu/perdu/cassé/retourné) d'une référence,
+// réparti entre Stock Général, Stock Local (station régionale) et Présentoir.
+type StockSummaryItem struct {
+	Reference     *string `db:"reference" json:"reference,omitempty"`
+	Brand         *string `db:"brand" json:"brand,omitempty"`
+	QtyGeneral    int     `db:"qty_general" json:"qty_general"`
+	QtyLocal      int     `db:"qty_local" json:"qty_local"`
+	QtyPresentoir int     `db:"qty_presentoir" json:"qty_presentoir"`
+	QtyTotal      int     `db:"qty_total" json:"qty_total"`
+	IsCritical    bool    `db:"is_critical" json:"is_critical"`
+}
+
 // Movement représente un mouvement de monture
 type Movement struct {
 	ID             int64          `db:"id" json:"id"`

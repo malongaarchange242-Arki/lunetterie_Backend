@@ -52,6 +52,19 @@ func (h *GlassHandler) ListGlasses(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"glasses": glasses})
 }
 
+// GetStockSummary renvoie le stock actif agrégé par référence, réparti entre
+// Stock Général, Stock Local et Présentoir.
+// GET /api/v1/inventory/stock-summary
+func (h *GlassHandler) GetStockSummary(c *gin.Context) {
+	summary, err := h.repo.GetStockSummaryByReference()
+	if err != nil {
+		shared.InternalError(c, "Impossible de calculer le résumé du stock")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{"items": summary})
+}
+
 // GetGlassByBarcode recherche une monture par code-barres (toutes stations confondues).
 // Si station_id est fourni et que la monture est à ce poste, sa recherche vaut confirmation de
 // sa présence physique sur le présentoir : son statut et son emplacement sont mis à jour

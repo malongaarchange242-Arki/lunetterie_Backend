@@ -88,6 +88,35 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 	return items, nil
 }
 
+// stockCriticalThreshold : une référence est jugée en stock critique quand sa quantité
+// totale active (Stock Général + Stock Local + Présentoir) descend à ce seuil ou en dessous.
+const stockCriticalThreshold = 2
+
+// GetStockSummaryByReference agrège le stock actif par référence, réparti entre
+// Stock Général (station "Stock Principal"), Stock Local (station "Station Pointe-Noire")
+// et Présentoir. Exclut les montures vendues, perdues, cassées ou retournées.
+func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryItem, error) {
+	items := []models.StockSummaryItem{}
+	query := `
+		SELECT
+			ga.reference, ga.brand,
+			COUNT(*) FILTER (WHERE s.name = 'Stock Principal') AS qty_general,
+			COUNT(*) FILTER (WHERE s.name = 'Station Pointe-Noire') AS qty_local,
+			COUNT(*) FILTER (WHERE s.name = 'Présentoir') AS qty_presentoir,
+			COUNT(*) AS qty_total,
+			(COUNT(*) <= $1) AS is_critical
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.status NOT IN ('VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE')
+		GROUP BY ga.reference, ga.brand
+		ORDER BY ga.reference NULLS LAST`
+	if err := r.db.Select(&items, query, stockCriticalThreshold); err != nil {
+		return nil, fmt.Errorf("impossible de calculer le résumé du stock: %w", err)
+	}
+	return items, nil
+}
+
 // FindByStatuses liste les montures filtrées par statut, toutes stations confondues.
 func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
