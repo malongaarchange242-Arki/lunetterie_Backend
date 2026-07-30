@@ -135,14 +135,4 @@ type Supplier struct {
 	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
 }
 
-// Delivery représente un arrivage
-type Delivery struct {
-	ID         int64     `db:"id" json:"id"`
-	SupplierID int64     `db:"supplier_id" json:"supplier_id"`
-	Reference  *string   `db:"reference" json:"reference,omitempty"`
-	ReceivedBy *int64    `db:"received_by" json:"received_by,omitempty"`
-	StationID  int64     `db:"station_id" json:"station_id"`
-	Notes      *string   `db:"notes" json:"notes,omitempty"`
-	ReceivedAt time.Time `db:"received_at" json:"received_at"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
-}
+// NOTE: Delivery model moved to models/delivery.go

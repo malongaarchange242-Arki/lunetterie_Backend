@@ -94,6 +94,8 @@ func main() {
 	authSvc := authServices.NewAuthService(os.Getenv("JWT_SECRET"))
 	webauthnSvc := authServices.NewWebAuthnService(webauthnRepo, userRepo)
 	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
+	deliveryRepo := repositories.NewDeliveryRepository(db)
+	deliverySvc := services.NewDeliveryService(deliveryRepo, glassRepo, movementSvc)
 	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
@@ -115,6 +117,8 @@ func main() {
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
+	// Delivery handler
+	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo)
 	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
@@ -232,6 +236,12 @@ func main() {
 				transfers.POST("/:id/items", transferHandler.AddItem)
 				transfers.POST("/:id/dispatch", transferHandler.Dispatch)
 				transfers.POST("/:id/receive", transferHandler.ReceiveItem)
+			}
+			deliveries := inventory.Group("/deliveries")
+			{
+				// POST /api/v1/inventory/deliveries
+				// body: { station_id, barcodes: [...] }
+				deliveries.POST("", deliveryHandler.CreateDelivery)
 			}
 		}
 	}
