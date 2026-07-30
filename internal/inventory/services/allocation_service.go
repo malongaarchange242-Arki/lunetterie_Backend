@@ -47,6 +47,26 @@ func (s *AllocationService) FindFreeLocation(stationID int64, zone models.ZoneTy
 	return &location, nil
 }
 
+// FindOrCreatePresentoirLocation trouve un emplacement libre en zone PRESENTOIR pour la station,
+// ou en crée un à la volée si aucun n'a encore été généré (le générateur d'emplacements ne
+// produit aujourd'hui que la zone STOCK). Le code est dérivé du code-barres pour rester unique.
+func (s *AllocationService) FindOrCreatePresentoirLocation(stationID int64, barcode string) (*models.StorageLocation, error) {
+	if location, err := s.FindFreeLocation(stationID, models.ZonePresentoir); err == nil {
+		return location, nil
+	}
+
+	var location models.StorageLocation
+	query := `
+		INSERT INTO storage_locations (station_id, zone, code, type, status)
+		VALUES ($1, $2, $3, 'POSITION', 'OCCUPE')
+		RETURNING id, station_id, code, type, zone, status`
+	err := s.db.Get(&location, query, stationID, models.ZonePresentoir, "PRESENTOIR-"+barcode)
+	if err != nil {
+		return nil, fmt.Errorf("impossible de créer un emplacement présentoir: %w", err)
+	}
+	return &location, nil
+}
+
 // FreeLocation libère un emplacement
 func (s *AllocationService) FreeLocation(locationID int64) error {
 	_, err := s.db.Exec(

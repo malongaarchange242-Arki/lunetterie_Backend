@@ -25,33 +25,36 @@ var placeableStatuses = map[models.GlassStatus]bool{
 	models.StatusEnStockGeneral:     true,
 }
 
-// PlaceOnDisplay est déclenché par la recherche d'un code-barres au poste Présentoir : si la
-// monture est bien à ce poste et pas encore exposée, elle passe automatiquement au statut
-// EN_PRESENTOIR et reçoit un emplacement dédié à la zone présentoir (le code-barres est conservé
-// tel quel). Si la monture appartient à un autre poste, est déjà exposée, ou n'est pas dans un
-// statut éligible, l'appel est un no-op silencieux (la recherche reste une simple consultation).
+// PlaceOnDisplay est déclenché par la recherche d'un code-barres au poste Présentoir : la
+// monture passe automatiquement au statut EN_PRESENTOIR et reçoit un emplacement dédié à la
+// zone présentoir de ce poste (le code-barres est conservé tel quel). Si elle se trouvait sur
+// un autre poste, elle y est rattachée directement — le scan vaut confirmation physique de sa
+// présence sur le présentoir. Si elle est déjà exposée à ce poste, ou dans un statut non
+// éligible (réservée, vendue, en laboratoire...), l'appel est un no-op silencieux : la recherche
+// reste alors une simple consultation.
 func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64) error {
 	glass, err := s.glassRepo.GetByBarcode(barcode)
 	if err != nil {
 		return err
 	}
-	if glass.StationID != stationID || glass.Status == models.StatusEnPresentoir || !placeableStatuses[glass.Status] {
+	if (glass.StationID == stationID && glass.Status == models.StatusEnPresentoir) || !placeableStatuses[glass.Status] {
 		return nil
 	}
 
-	location, err := s.allocation.FindFreeLocation(stationID, models.ZonePresentoir)
+	location, err := s.allocation.FindOrCreatePresentoirLocation(stationID, barcode)
 	if err != nil {
-		log.Printf("⚠️  Aucun emplacement présentoir libre pour la monture #%d: %v", glass.ID, err)
+		log.Printf("⚠️  Impossible d'assigner un emplacement présentoir pour la monture #%d: %v", glass.ID, err)
 		return nil
 	}
 
+	oldStationID := glass.StationID
 	oldLocationID := glass.LocationID
 	if oldLocationID != nil {
 		if err := s.allocation.FreeLocation(*oldLocationID); err != nil {
 			log.Printf("⚠️  Erreur libération ancien emplacement (glass #%d): %v", glass.ID, err)
 		}
 	}
-	if err := s.glassRepo.UpdateLocation(glass.ID, location.ID); err != nil {
+	if err := s.glassRepo.UpdateStationAndLocation(glass.ID, stationID, location.ID); err != nil {
 		return err
 	}
 	if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnPresentoir); err != nil {
@@ -60,7 +63,7 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 
 	movement := &models.Movement{
 		GlassID:        glass.ID,
-		FromStationID:  &stationID,
+		FromStationID:  &oldStationID,
 		ToStationID:    &stationID,
 		FromLocationID: oldLocationID,
 		ToLocationID:   &location.ID,
