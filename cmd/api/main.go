@@ -94,6 +94,7 @@ func main() {
 	authSvc := authServices.NewAuthService(os.Getenv("JWT_SECRET"))
 	webauthnSvc := authServices.NewWebAuthnService(webauthnRepo, userRepo)
 	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc)
+	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
 
@@ -114,7 +115,7 @@ func main() {
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
-	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo)
+	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
