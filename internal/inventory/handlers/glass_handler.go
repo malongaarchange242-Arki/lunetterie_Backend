@@ -22,21 +22,28 @@ func NewGlassHandler(repo *repositories.GlassRepository, display *services.Displ
 	return &GlassHandler{repo: repo, display: display}
 }
 
-// ListGlasses liste les montures d'une station, filtrées par statut
+// ListGlasses liste les montures filtrées par statut, pour une station donnée,
+// ou toutes stations confondues si station_id est omis.
 // GET /api/v1/inventory/glasses?station_id=1&status=EN_STOCK_GENERAL,EN_STOCK_SOUS_STATION
+// GET /api/v1/inventory/glasses?status=PRETE_A_LIVRER (toutes stations)
 func (h *GlassHandler) ListGlasses(c *gin.Context) {
-	stationID, err := strconv.ParseInt(c.Query("station_id"), 10, 64)
-	if err != nil {
-		shared.BadRequest(c, "station_id requis")
-		return
-	}
-
 	statuses := []string{"EN_STOCK_GENERAL", "EN_STOCK_SOUS_STATION"}
 	if raw := c.Query("status"); raw != "" {
 		statuses = strings.Split(raw, ",")
 	}
 
-	glasses, err := h.repo.FindByStationAndStatuses(stationID, statuses)
+	var glasses interface{}
+	var err error
+	if raw := c.Query("station_id"); raw != "" {
+		stationID, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil {
+			shared.BadRequest(c, "station_id invalide")
+			return
+		}
+		glasses, err = h.repo.FindByStationAndStatuses(stationID, statuses)
+	} else {
+		glasses, err = h.repo.FindByStatuses(statuses)
+	}
 	if err != nil {
 		shared.InternalError(c, "Impossible de récupérer les montures")
 		return

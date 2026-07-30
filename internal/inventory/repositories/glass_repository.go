@@ -88,6 +88,26 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 	return items, nil
 }
 
+// FindByStatuses liste les montures filtrées par statut, toutes stations confondues.
+func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListItem, error) {
+	items := []models.GlassListItem{}
+	query := `
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.status = ANY($1)
+		ORDER BY g.created_at DESC`
+	if err := r.db.Select(&items, query, pq.Array(statuses)); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures: %w", err)
+	}
+	return items, nil
+}
+
 // FindDetailByBarcode recherche une monture par code-barres (toutes stations confondues),
 // avec ses attributs issus de l'analyse IA/vérification et son emplacement actuel.
 func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassListItem, error) {
