@@ -94,7 +94,7 @@ func main() {
 	authSvc := authServices.NewAuthService(os.Getenv("JWT_SECRET"))
 	webauthnSvc := authServices.NewWebAuthnService(webauthnRepo, userRepo)
 	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
-	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc)
+	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
 

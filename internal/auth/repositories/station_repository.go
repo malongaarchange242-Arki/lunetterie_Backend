@@ -27,10 +27,10 @@ func (r *StationRepository) FindAll() ([]models.Station, error) {
 	return stations, nil
 }
 func (r *StationRepository) GetByID(id int64) (*models.Station, error) {
-    var station models.Station
-    query := `SELECT id, name, type, city, address, phone, is_active, created_at FROM stations WHERE id = $1`
-    if err := r.db.Get(&station, query, id); err != nil {
-        return nil, fmt.Errorf("station introuvable: %w", err)
-    }
-    return &station, nil
+	var station models.Station
+	query := `SELECT id, name, type, city, address, phone, is_active, created_at FROM stations WHERE id = $1`
+	if err := r.db.Get(&station, query, id); err != nil {
+		return nil, fmt.Errorf("station introuvable: %w", err)
+	}
+	return &station, nil
 }
