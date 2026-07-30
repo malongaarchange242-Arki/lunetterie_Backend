@@ -217,6 +217,7 @@ func main() {
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
 			inventory.GET("/glasses", glassHandler.ListGlasses)
+			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
 			storage := inventory.Group("/storage")
 			{
 				storage.POST("/generate", storageGeneratorHandler.GenerateLocations)

@@ -42,3 +42,17 @@ func (h *GlassHandler) ListGlasses(c *gin.Context) {
 
 	shared.Success(c, http.StatusOK, gin.H{"glasses": glasses})
 }
+
+// GetGlassByBarcode recherche une monture par code-barres (toutes stations confondues)
+// GET /api/v1/inventory/glasses/:barcode
+func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
+	barcode := c.Param("barcode")
+
+	glass, err := h.repo.FindDetailByBarcode(barcode)
+	if err != nil {
+		shared.NotFound(c, "Aucune monture ne correspond à ce code-barres")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{"glass": glass})
+}

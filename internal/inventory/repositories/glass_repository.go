@@ -87,6 +87,25 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 	return items, nil
 }
 
+// FindDetailByBarcode recherche une monture par code-barres (toutes stations confondues),
+// avec ses attributs issus de l'analyse IA/vérification et son emplacement actuel.
+func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassListItem, error) {
+	var item models.GlassListItem
+	query := `
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.barcode = $1`
+	if err := r.db.Get(&item, query, barcode); err != nil {
+		return nil, fmt.Errorf("monture introuvable: %w", err)
+	}
+	return &item, nil
+}
+
 // UpdateStatus met à jour le statut d'une monture
 func (r *GlassRepository) UpdateStatus(glassID int64, status models.GlassStatus) error {
 	query := `

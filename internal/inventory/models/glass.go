@@ -29,6 +29,7 @@ type GlassListItem struct {
 	ID           int64    `db:"id" json:"id"`
 	Barcode      string   `db:"barcode" json:"barcode"`
 	StationID    int64    `db:"station_id" json:"station_id"`
+	StationName  *string  `db:"station_name" json:"station_name,omitempty"`
 	Status       string   `db:"status" json:"status"`
 	Price        *float64 `db:"price" json:"price,omitempty"`
 	Reference    *string  `db:"reference" json:"reference,omitempty"`
