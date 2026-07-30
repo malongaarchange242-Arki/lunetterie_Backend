@@ -42,12 +42,13 @@ var placeableStatuses = map[models.GlassStatus]bool{
 // éligible (réservée, vendue...), l'appel est un no-op : la recherche reste alors une simple
 // consultation.
 //
-// Cas EN_TRANSIT (monture envoyée par transfert, ex: depuis scan.html) :
+// Cas EN_TRANSIT (monture envoyée par transfert, ex: depuis scan.html) : le scan à n'importe
+// quelle station vaut confirmation physique de l'arrivée et change le statut automatiquement,
+// que la ligne de transfert soit retrouvée ou non (rapprochement best-effort, non bloquant).
 //   - Vers le Laboratoire : le scan vaut à la fois réception et mise en labo, en une seule action
 //     (pas de notion de "stock" intermédiaire pour ce poste).
-//   - Vers un magasin normal : le scan clôture le transfert (et le transfert entier si c'était la
-//     dernière monture) et fait atterrir la monture en stock local (EN_STOCK_SOUS_STATION) avec
-//     un emplacement de zone STOCK — PAS en présentoir. La mise en présentoir est une étape
+//   - Vers un magasin normal : la monture atterrit en stock local (EN_STOCK_SOUS_STATION) avec un
+//     emplacement de zone STOCK — PAS en présentoir. La mise en présentoir est une étape
 //     distincte, déclenchée par un scan ultérieur une fois la monture déjà en stock local (elle
 //     devient alors éligible via placeableStatuses, comme n'importe quelle monture en stock).
 //
@@ -68,10 +69,11 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 		if s.isLaboratoireStation(stationID) {
 			return "", s.placeGlass(glass, stationID, userID)
 		}
-		note, ok := s.completeTransferReception(glass.ID, stationID, userID)
-		if !ok {
-			return note, nil
-		}
+		// Le rapprochement avec une ligne de transfert active est tenté en best-effort (pour
+		// clôturer proprement le transfert quand c'en est un), mais n'est plus bloquant : le
+		// scan à lui seul vaut confirmation physique de l'arrivée, même sans transfert retrouvé
+		// (transfert jamais créé/expédié, données de test, etc.).
+		s.completeTransferReception(glass.ID, stationID, userID)
 		return "", s.receiveIntoLocalStock(glass, stationID, userID)
 	}
 
