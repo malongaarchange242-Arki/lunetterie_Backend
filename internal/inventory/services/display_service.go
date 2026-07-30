@@ -27,6 +27,10 @@ func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *re
 var placeableStatuses = map[models.GlassStatus]bool{
 	models.StatusEnStockSousStation: true,
 	models.StatusEnStockGeneral:     true,
+	// Une monture déjà exposée (présentoir ou labo) ailleurs reste déplaçable : la rescanner à un
+	// nouveau poste vaut confirmation qu'elle a physiquement changé d'endroit.
+	models.StatusEnPresentoir:  true,
+	models.StatusEnLaboratoire: true,
 }
 
 // PlaceOnDisplay est déclenché par la recherche d'un code-barres au poste Présentoir : la
@@ -34,12 +38,19 @@ var placeableStatuses = map[models.GlassStatus]bool{
 // zone présentoir de ce poste (le code-barres est conservé tel quel). Si elle se trouvait sur
 // un autre poste, elle y est rattachée directement — le scan vaut confirmation physique de sa
 // présence sur le présentoir. Si elle est déjà exposée à ce poste, ou dans un statut non
-// éligible (réservée, vendue, en laboratoire...), l'appel est un no-op silencieux : la recherche
-// reste alors une simple consultation.
+// éligible (réservée, vendue...), l'appel est un no-op silencieux : la recherche reste alors une
+// simple consultation.
 //
-// Cas EN_TRANSIT : le scan à la station de destination du transfert vaut à la fois réception
-// (clôture la ligne de transfert, et le transfert entier si c'était la dernière monture) et
-// mise en présentoir, en une seule action. Scanner à une autre station reste un no-op.
+// Cas EN_TRANSIT (monture envoyée par transfert, ex: depuis scan.html) :
+//   - Vers le Laboratoire : le scan vaut à la fois réception et mise en labo, en une seule action
+//     (pas de notion de "stock" intermédiaire pour ce poste).
+//   - Vers un magasin normal : le scan clôture le transfert (et le transfert entier si c'était la
+//     dernière monture) et fait atterrir la monture en stock local (EN_STOCK_SOUS_STATION) avec
+//     un emplacement de zone STOCK — PAS en présentoir. La mise en présentoir est une étape
+//     distincte, déclenchée par un scan ultérieur une fois la monture déjà en stock local (elle
+//     devient alors éligible via placeableStatuses, comme n'importe quelle monture en stock).
+//
+// Scanner depuis une station qui n'est pas la destination du transfert reste un no-op.
 func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64) error {
 	glass, err := s.glassRepo.GetByBarcode(barcode)
 	if err != nil {
@@ -50,14 +61,64 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 	}
 
 	if glass.Status == models.StatusEnTransit {
-		if !s.isLaboratoireStation(stationID) && !s.completeTransferReception(glass.ID, stationID, userID) {
+		if s.isLaboratoireStation(stationID) {
+			return s.placeGlass(glass, stationID, userID)
+		}
+		if !s.completeTransferReception(glass.ID, stationID, userID) {
 			return nil
 		}
-	} else if !placeableStatuses[glass.Status] {
+		return s.receiveIntoLocalStock(glass, stationID, userID)
+	}
+
+	if !placeableStatuses[glass.Status] {
+		return nil
+	}
+	return s.placeGlass(glass, stationID, userID)
+}
+
+// receiveIntoLocalStock fait atterrir une monture reçue par transfert dans le stock local de la
+// station (zone STOCK), sans la mettre sur le présentoir. Reflète TransferService.ReceiveItem,
+// mais déclenché ici automatiquement par la simple recherche du code-barres.
+func (s *DisplayService) receiveIntoLocalStock(glass *models.Glass, stationID, userID int64) error {
+	location, err := s.allocation.FindFreeLocation(stationID, models.ZoneStock)
+	if err != nil {
+		log.Printf("⚠️  Aucun emplacement de stock libre pour la réception de la monture #%d: %v", glass.ID, err)
 		return nil
 	}
 
-	location, err := s.allocation.FindOrCreatePresentoirLocation(stationID, barcode)
+	oldStationID := glass.StationID
+	oldLocationID := glass.LocationID
+	if oldLocationID != nil {
+		if err := s.allocation.FreeLocation(*oldLocationID); err != nil {
+			log.Printf("⚠️  Erreur libération ancien emplacement (glass #%d): %v", glass.ID, err)
+		}
+	}
+	if err := s.glassRepo.UpdateStationAndLocation(glass.ID, stationID, location.ID); err != nil {
+		return err
+	}
+	if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnStockSousStation); err != nil {
+		return err
+	}
+
+	movement := &models.Movement{
+		GlassID:        glass.ID,
+		FromStationID:  &oldStationID,
+		ToStationID:    &stationID,
+		FromLocationID: oldLocationID,
+		ToLocationID:   &location.ID,
+		Action:         models.ActionReceptionStation,
+		UserID:         userID,
+	}
+	if err := s.movementRepo.Create(movement); err != nil {
+		log.Printf("⚠️  Erreur création mouvement réception station (glass #%d): %v", glass.ID, err)
+	}
+	return nil
+}
+
+// placeGlass assigne un emplacement présentoir (ou laboratoire) et bascule le statut en
+// conséquence (EN_PRESENTOIR, ou EN_LABORATOIRE si la station scannée est le Laboratoire).
+func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64) error {
+	location, err := s.allocation.FindOrCreatePresentoirLocation(stationID, glass.Barcode)
 	if err != nil {
 		log.Printf("⚠️  Impossible d'assigner un emplacement présentoir pour la monture #%d: %v", glass.ID, err)
 		return nil
