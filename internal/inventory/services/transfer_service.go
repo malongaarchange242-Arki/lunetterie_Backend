@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	authRepositories "github.com/lunetterie/backend/internal/auth/repositories"
 	"github.com/lunetterie/backend/internal/inventory/models"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
 )
@@ -14,27 +15,29 @@ type TransferService struct {
 	glassRepo    *repositories.GlassRepository
 	movementRepo *repositories.MovementRepository
 	allocation   *AllocationService
+	stationRepo  *authRepositories.StationRepository
 }
 
-// NewTransferService crée une nouvelle instance
+var transferableStatuses = map[models.GlassStatus]bool{
+	models.StatusEnStockGeneral:     true,
+	models.StatusEnStockSousStation: true,
+	models.StatusEnPresentoir:       true,
+}
+
 func NewTransferService(
 	transferRepo *repositories.TransferRepository,
 	glassRepo *repositories.GlassRepository,
 	movementRepo *repositories.MovementRepository,
 	allocation *AllocationService,
+	stationRepo *authRepositories.StationRepository,
 ) *TransferService {
 	return &TransferService{
 		transferRepo: transferRepo,
 		glassRepo:    glassRepo,
 		movementRepo: movementRepo,
 		allocation:   allocation,
+		stationRepo:  stationRepo,
 	}
-}
-
-// transferableStatuses liste les statuts à partir desquels une monture peut être transférée
-var transferableStatuses = map[models.GlassStatus]bool{
-	models.StatusEnStockGeneral:     true,
-	models.StatusEnStockSousStation: true,
 }
 
 // CreateTransfer crée un nouveau transfert en préparation
