@@ -70,10 +70,6 @@ func (r *GlassRepository) GetByBarcode(barcode string) (*models.Glass, error) {
 
 // FindByStationAndStatuses liste les montures d'une station filtrées par statut,
 // avec leurs attributs (référence, forme, couleur...) issus de l'analyse IA/vérification.
-// FindByStationAndStatuses liste les montures d'une station pour les statuts donnés.
-// Cas particulier EN_TRANSIT : g.station_id reste sur la station d'ORIGINE tant que le
-// transfert n'est pas réceptionné (voir ClearLocation/UpdateStationAndLocation), donc pour
-// ce statut on filtre plutôt sur la destination du transfert actif (transfers.to_station_id).
 func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []string) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
 	query := `
@@ -84,13 +80,7 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
-		LEFT JOIN transfer_items ti ON ti.glass_id = g.id AND ti.status = 'IN_TRANSIT'
-		LEFT JOIN transfers t ON t.id = ti.transfer_id AND t.status = 'IN_TRANSIT'
-		WHERE g.status = ANY($2)
-			AND (
-				(g.status <> 'EN_TRANSIT' AND g.station_id = $1)
-				OR (g.status = 'EN_TRANSIT' AND t.to_station_id = $1)
-			)
+		WHERE g.station_id = $1 AND g.status = ANY($2)
 		ORDER BY g.created_at DESC`
 	if err := r.db.Select(&items, query, stationID, pq.Array(statuses)); err != nil {
 		return nil, fmt.Errorf("impossible de récupérer les montures: %w", err)

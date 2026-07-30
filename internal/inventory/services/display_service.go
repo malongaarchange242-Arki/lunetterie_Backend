@@ -15,11 +15,12 @@ type DisplayService struct {
 	movementRepo *repositories.MovementRepository
 	allocation   *AllocationService
 	stationRepo  *authRepositories.StationRepository
+	transferRepo *repositories.TransferRepository
 }
 
 // NewDisplayService crée une nouvelle instance
-func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService, stationRepo *authRepositories.StationRepository) *DisplayService {
-	return &DisplayService{glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation, stationRepo: stationRepo}
+func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService, stationRepo *authRepositories.StationRepository, transferRepo *repositories.TransferRepository) *DisplayService {
+	return &DisplayService{glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation, stationRepo: stationRepo, transferRepo: transferRepo}
 }
 
 // placeableStatuses liste les statuts à partir desquels une monture peut être placée sur le présentoir ou en laboratoire
@@ -35,6 +36,10 @@ var placeableStatuses = map[models.GlassStatus]bool{
 // présence sur le présentoir. Si elle est déjà exposée à ce poste, ou dans un statut non
 // éligible (réservée, vendue, en laboratoire...), l'appel est un no-op silencieux : la recherche
 // reste alors une simple consultation.
+//
+// Cas EN_TRANSIT : le scan à la station de destination du transfert vaut à la fois réception
+// (clôture la ligne de transfert, et le transfert entier si c'était la dernière monture) et
+// mise en présentoir, en une seule action. Scanner à une autre station reste un no-op.
 func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64) error {
 	glass, err := s.glassRepo.GetByBarcode(barcode)
 	if err != nil {
@@ -43,7 +48,12 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 	if glass.StationID == stationID && (glass.Status == models.StatusEnPresentoir || glass.Status == models.StatusEnLaboratoire) {
 		return nil
 	}
-	if !placeableStatuses[glass.Status] && !(glass.Status == models.StatusEnTransit && s.isLaboratoireStation(stationID)) {
+
+	if glass.Status == models.StatusEnTransit {
+		if !s.isLaboratoireStation(stationID) && !s.completeTransferReception(glass.ID, stationID, userID) {
+			return nil
+		}
+	} else if !placeableStatuses[glass.Status] {
 		return nil
 	}
 
@@ -88,6 +98,41 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 		log.Printf("⚠️  Erreur création mouvement mise en présentoir (glass #%d): %v", glass.ID, err)
 	}
 	return nil
+}
+
+// completeTransferReception clôture la réception du transfert actif d'une monture, si la
+// station scannée correspond bien à la destination du transfert. Renvoie false sans effet
+// si la monture n'a pas de transfert actif vers cette station.
+func (s *DisplayService) completeTransferReception(glassID, stationID, userID int64) bool {
+	if s.transferRepo == nil {
+		return false
+	}
+
+	item, err := s.transferRepo.GetActiveItemByGlassID(glassID)
+	if err != nil {
+		return false
+	}
+	transfer, err := s.transferRepo.GetByID(item.TransferID)
+	if err != nil || transfer.ToStationID != stationID {
+		return false
+	}
+
+	if err := s.transferRepo.MarkItemReceived(item.ID); err != nil {
+		log.Printf("⚠️  Erreur clôture ligne de transfert (item #%d): %v", item.ID, err)
+		return false
+	}
+
+	remaining, err := s.transferRepo.CountItemsNotReceived(transfer.ID)
+	if err != nil {
+		log.Printf("⚠️  Erreur comptage montures restantes (transfert #%d): %v", transfer.ID, err)
+		return true
+	}
+	if remaining == 0 {
+		if err := s.transferRepo.MarkReceived(transfer.ID, userID); err != nil {
+			log.Printf("⚠️  Erreur clôture transfert #%d: %v", transfer.ID, err)
+		}
+	}
+	return true
 }
 
 func (s *DisplayService) isLaboratoireStation(stationID int64) bool {

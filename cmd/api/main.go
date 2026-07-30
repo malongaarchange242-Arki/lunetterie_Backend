@@ -96,7 +96,7 @@ func main() {
 	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	deliveryRepo := repositories.NewDeliveryRepository(db)
 	deliverySvc := services.NewDeliveryService(deliveryRepo, glassRepo, movementSvc)
-	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo)
+	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
 
