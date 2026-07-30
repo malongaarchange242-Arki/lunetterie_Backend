@@ -227,6 +227,7 @@ func main() {
 			{
 				storage.POST("/generate", storageGeneratorHandler.GenerateLocations)
 				storage.POST("/find-free", storageGeneratorHandler.FindFreeLocation)
+				storage.GET("/next-free", storageGeneratorHandler.PreviewFreeLocation)
 			}
 			transfers := inventory.Group("/transfers")
 			{

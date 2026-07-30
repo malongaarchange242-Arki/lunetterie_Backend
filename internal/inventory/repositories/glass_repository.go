@@ -74,6 +74,7 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 	items := []models.GlassListItem{}
 	query := `
 		SELECT g.id, g.barcode, g.station_id, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g
@@ -93,6 +94,7 @@ func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassList
 	var item models.GlassListItem
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g

@@ -56,6 +56,29 @@ func (s *StorageGeneratorService) GetLocationPath(locationID int64) (string, str
 	return path, code, nil
 }
 
+// PeekFreeLocation retourne le prochain emplacement libre pour une station SANS le réserver
+// (pas de passage en 'OCCUPE') : utilisé pour un simple affichage prévisionnel avant
+// l'enregistrement réel. L'emplacement effectivement attribué à la validation peut différer
+// si un autre enregistrement concurrent le prend entre-temps.
+func (s *StorageGeneratorService) PeekFreeLocation(stationID int64, zone models.ZoneType) (int64, string, string, error) {
+	var locationID int64
+	err := s.db.QueryRow(
+		`SELECT id FROM storage_locations
+		 WHERE station_id = $1 AND zone = $2 AND type = 'POSITION' AND status = 'LIBRE'
+		 ORDER BY code LIMIT 1`,
+		stationID, zone,
+	).Scan(&locationID)
+	if err != nil {
+		return 0, "", "", fmt.Errorf("aucun emplacement libre: %w", err)
+	}
+
+	path, code, err := s.GetLocationPath(locationID)
+	if err != nil {
+		return locationID, "", "", nil
+	}
+	return locationID, path, code, nil
+}
+
 // FindFreeLocation trouve et réserve le premier emplacement libre pour une station
 func (s *StorageGeneratorService) FindFreeLocation(stationID int64, zone models.ZoneType) (int64, string, string, error) {
 	var locationID int64
