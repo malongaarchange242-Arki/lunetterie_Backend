@@ -47,24 +47,47 @@ func (s *AllocationService) FindFreeLocation(stationID int64, zone models.ZoneTy
 	return &location, nil
 }
 
+// presentoirLocationCode génère un code au même format que les emplacements de stock
+// (RAYON-A-ETA-01-BAC-A-POS-03), à partir d'un rang séquentiel (1, 2, 3...).
+func presentoirLocationCode(seq int) string {
+	rayon := string(rune('A' + (seq-1)/50%10))
+	etagere := (seq-1)/10%5 + 1
+	bac := string(rune('A' + (seq-1)%10))
+	position := (seq-1)%10 + 1
+	return fmt.Sprintf("RAYON-%s-ETA-%02d-BAC-%s-POS-%02d", rayon, etagere, bac, position)
+}
+
 // FindOrCreatePresentoirLocation trouve un emplacement libre en zone PRESENTOIR pour la station,
 // ou en crée un à la volée si aucun n'a encore été généré (le générateur d'emplacements ne
-// produit aujourd'hui que la zone STOCK). Le code est dérivé du code-barres pour rester unique.
+// produit aujourd'hui que la zone STOCK). Le code créé suit le même format que les emplacements
+// de stock (RAYON-A-ETA-01-BAC-A-POS-03) pour rester cohérent visuellement.
 func (s *AllocationService) FindOrCreatePresentoirLocation(stationID int64, barcode string) (*models.StorageLocation, error) {
 	if location, err := s.FindFreeLocation(stationID, models.ZonePresentoir); err == nil {
 		return location, nil
 	}
 
-	var location models.StorageLocation
-	query := `
-		INSERT INTO storage_locations (station_id, zone, code, type, status)
-		VALUES ($1, $2, $3, 'POSITION', 'OCCUPE')
-		RETURNING id, station_id, code, type, zone, status`
-	err := s.db.Get(&location, query, stationID, models.ZonePresentoir, "PRESENTOIR-"+barcode)
-	if err != nil {
-		return nil, fmt.Errorf("impossible de créer un emplacement présentoir: %w", err)
+	var count int
+	if err := s.db.Get(&count, `SELECT COUNT(*) FROM storage_locations WHERE station_id = $1 AND zone = $2`, stationID, models.ZonePresentoir); err != nil {
+		return nil, fmt.Errorf("impossible de compter les emplacements présentoir existants: %w", err)
 	}
-	return &location, nil
+
+	// Petite boucle de retry en cas de course (deux créations concurrentes sur le même rang).
+	for attempt := 1; attempt <= 5; attempt++ {
+		code := presentoirLocationCode(count + attempt)
+
+		var location models.StorageLocation
+		query := `
+			INSERT INTO storage_locations (station_id, zone, code, type, status)
+			VALUES ($1, $2, $3, 'POSITION', 'OCCUPE')
+			ON CONFLICT (station_id, zone, code) DO NOTHING
+			RETURNING id, station_id, code, type, zone, status`
+		err := s.db.Get(&location, query, stationID, models.ZonePresentoir, code)
+		if err == nil {
+			return &location, nil
+		}
+	}
+
+	return nil, fmt.Errorf("impossible de créer un emplacement présentoir pour la station #%d", stationID)
 }
 
 // FreeLocation libère un emplacement
