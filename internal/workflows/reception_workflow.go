@@ -14,14 +14,15 @@ import (
 
 // ReceptionWorkflow orchestrate le workflow complet de réception
 type ReceptionWorkflow struct {
-	allocationService *services.AllocationService
-	movementService   *services.MovementService
-	barcodeService    *services.BarcodeService
-	analysisService   *services.AnalysisService
-	storageService    *services.StorageService
-	glassRepo         *repositories.GlassRepository
-	locationRepo      *repositories.LocationRepository
-	analysisRepo      *repositories.AnalysisRepository
+	allocationService   *services.AllocationService
+	movementService     *services.MovementService
+	barcodeService      *services.BarcodeService
+	analysisService     *services.AnalysisService
+	storageService      *services.StorageService
+	glassRepo           *repositories.GlassRepository
+	locationRepo        *repositories.LocationRepository
+	analysisRepo        *repositories.AnalysisRepository
+	shapeCorrectionRepo *repositories.ShapeCorrectionRepository
 }
 
 // NewReceptionWorkflow crée une nouvelle instance
@@ -34,16 +35,18 @@ func NewReceptionWorkflow(
 	glassRepo *repositories.GlassRepository,
 	locationRepo *repositories.LocationRepository,
 	analysisRepo *repositories.AnalysisRepository,
+	shapeCorrectionRepo *repositories.ShapeCorrectionRepository,
 ) *ReceptionWorkflow {
 	return &ReceptionWorkflow{
-		allocationService: allocationSvc,
-		movementService:   movementSvc,
-		barcodeService:    barcodeSvc,
-		analysisService:   analysisSvc,
-		storageService:    storageSvc,
-		glassRepo:         glassRepo,
-		locationRepo:      locationRepo,
-		analysisRepo:      analysisRepo,
+		allocationService:   allocationSvc,
+		movementService:     movementSvc,
+		barcodeService:      barcodeSvc,
+		analysisService:     analysisSvc,
+		storageService:      storageSvc,
+		glassRepo:           glassRepo,
+		locationRepo:        locationRepo,
+		analysisRepo:        analysisRepo,
+		shapeCorrectionRepo: shapeCorrectionRepo,
 	}
 }
 
@@ -69,7 +72,7 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 	// Étape: Générer un code-barres unique
 	log.Println("🏷️  Génération code-barres...")
-	barcode, err := w.barcodeService.GenerateBarcode("LB")
+	barcode, err := w.barcodeService.GenerateBarcode()
 	if err != nil {
 		return nil, fmt.Errorf("erreur code-barres: %w", err)
 	}
@@ -119,6 +122,21 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 		return nil, fmt.Errorf("erreur création glass: %w", err)
 	}
 	log.Printf("✅ Glass créé: ID=%d", glass.ID)
+
+	// Étape: Journaliser une éventuelle correction manuelle de la forme détectée par l'IA
+	if req.DetectedShape != nil && req.Shape != nil && *req.DetectedShape != "" && *req.Shape != "" && *req.DetectedShape != *req.Shape {
+		correction := &models.ShapeCorrection{
+			GlassID:        glass.ID,
+			DetectedShape:  *req.DetectedShape,
+			CorrectedShape: *req.Shape,
+			UserID:         &userID,
+		}
+		if err := w.shapeCorrectionRepo.Create(correction); err != nil {
+			log.Printf("⚠️  Erreur journalisation correction de forme: %v", err)
+		} else {
+			log.Printf("✏️  Correction de forme journalisée: %s → %s", *req.DetectedShape, *req.Shape)
+		}
+	}
 
 	// Étape: Créer le mouvement
 	log.Println("📝 Création mouvement...")

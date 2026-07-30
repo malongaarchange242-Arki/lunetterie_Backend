@@ -1,0 +1,1 @@
+DROP SEQUENCE IF EXISTS barcode_seq;

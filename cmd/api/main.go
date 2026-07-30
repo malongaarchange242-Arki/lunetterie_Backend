@@ -78,6 +78,7 @@ func main() {
 	glassRepo := repositories.NewGlassRepository(db)
 	locationRepo := repositories.NewLocationRepository(db)
 	analysisRepo := repositories.NewAnalysisRepository(db)
+	shapeCorrectionRepo := repositories.NewShapeCorrectionRepository(db)
 	movementRepo := repositories.NewMovementRepository(db)
 	transferRepo := repositories.NewTransferRepository(db)
 	userRepo := authRepositories.NewUserRepository(db)
@@ -87,7 +88,7 @@ func main() {
 	// Initialiser les services
 	allocationSvc := services.NewAllocationService(db)
 	movementSvc := services.NewMovementService(movementRepo)
-	barcodeSvc := services.NewBarcodeService()
+	barcodeSvc := services.NewBarcodeService(db)
 	analysisSvc := services.NewAnalysisService(analysisRepo)
 	storageGeneratorSvc := services.NewStorageGeneratorService(db)
 	authSvc := authServices.NewAuthService(os.Getenv("JWT_SECRET"))
@@ -106,6 +107,7 @@ func main() {
 		glassRepo,
 		locationRepo,
 		analysisRepo,
+		shapeCorrectionRepo,
 	)
 
 	// Initialiser les handlers

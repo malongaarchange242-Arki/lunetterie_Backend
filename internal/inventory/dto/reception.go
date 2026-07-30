@@ -12,6 +12,9 @@ type ReceptionRequest struct {
 	Brand     *string `json:"brand" form:"brand"`
 	Gender    *string `json:"gender" form:"gender"`
 	Shape     *string `json:"shape" form:"shape"`
+	// Forme telle que détectée par l'IA (avant correction éventuelle par l'utilisateur) :
+	// sert uniquement à journaliser les corrections, jamais persistée telle quelle.
+	DetectedShape *string `json:"detected_shape" form:"detected_shape"`
 	Color     *string `json:"color" form:"color"`
 	Size      *string `json:"size" form:"size"`
 	Material  *string `json:"material" form:"material"`
