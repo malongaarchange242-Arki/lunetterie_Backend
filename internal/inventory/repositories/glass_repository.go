@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/lunetterie/backend/internal/inventory/models"
 )
 
@@ -65,6 +66,25 @@ func (r *GlassRepository) GetByBarcode(barcode string) (*models.Glass, error) {
 		return nil, fmt.Errorf("glass introuvable: %w", err)
 	}
 	return &glass, nil
+}
+
+// FindByStationAndStatuses liste les montures d'une station filtrées par statut,
+// avec leurs attributs (référence, forme, couleur...) issus de l'analyse IA/vérification.
+func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []string) ([]models.GlassListItem, error) {
+	items := []models.GlassListItem{}
+	query := `
+		SELECT g.id, g.barcode, g.station_id, g.status, g.price,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		WHERE g.station_id = $1 AND g.status = ANY($2)
+		ORDER BY g.created_at DESC`
+	if err := r.db.Select(&items, query, stationID, pq.Array(statuses)); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures: %w", err)
+	}
+	return items, nil
 }
 
 // UpdateStatus met à jour le statut d'une monture

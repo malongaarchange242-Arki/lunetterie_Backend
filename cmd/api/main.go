@@ -114,6 +114,7 @@ func main() {
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
+	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
@@ -215,6 +216,7 @@ func main() {
 		{
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
+			inventory.GET("/glasses", glassHandler.ListGlasses)
 			storage := inventory.Group("/storage")
 			{
 				storage.POST("/generate", storageGeneratorHandler.GenerateLocations)
