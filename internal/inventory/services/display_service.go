@@ -40,7 +40,10 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 	if err != nil {
 		return err
 	}
-	if (glass.StationID == stationID && glass.Status == models.StatusEnPresentoir) || !placeableStatuses[glass.Status] {
+	if glass.StationID == stationID && (glass.Status == models.StatusEnPresentoir || glass.Status == models.StatusEnLaboratoire) {
+		return nil
+	}
+	if !placeableStatuses[glass.Status] && !(glass.Status == models.StatusEnTransit && s.isLaboratoireStation(stationID)) {
 		return nil
 	}
 
