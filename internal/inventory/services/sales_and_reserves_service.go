@@ -9,21 +9,25 @@ import (
 )
 
 type SaleService struct {
-	saleRepo  *repositories.SaleRepository
-	glassRepo *repositories.GlassRepository
+	saleRepo     *repositories.SaleRepository
+	glassRepo    *repositories.GlassRepository
+	movementRepo *repositories.MovementRepository
+	allocation   *AllocationService
 }
 
 type ReserveService struct {
-	reserveRepo *repositories.ReserveRepository
-	glassRepo   *repositories.GlassRepository
+	reserveRepo  *repositories.ReserveRepository
+	glassRepo    *repositories.GlassRepository
+	movementRepo *repositories.MovementRepository
+	allocation   *AllocationService
 }
 
-func NewSaleService(saleRepo *repositories.SaleRepository, glassRepo *repositories.GlassRepository) *SaleService {
-	return &SaleService{saleRepo: saleRepo, glassRepo: glassRepo}
+func NewSaleService(saleRepo *repositories.SaleRepository, glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService) *SaleService {
+	return &SaleService{saleRepo: saleRepo, glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation}
 }
 
-func NewReserveService(reserveRepo *repositories.ReserveRepository, glassRepo *repositories.GlassRepository) *ReserveService {
-	return &ReserveService{reserveRepo: reserveRepo, glassRepo: glassRepo}
+func NewReserveService(reserveRepo *repositories.ReserveRepository, glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService) *ReserveService {
+	return &ReserveService{reserveRepo: reserveRepo, glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation}
 }
 
 func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int64) (*models.Sale, error) {
@@ -51,14 +55,27 @@ func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int6
 			continue
 		}
 
-		// For a "Vendre" action from Présentoir we mark the glass as en laboratoire
-		// so the backend keeps it available for lab processing rather than marking
-		// it immediately as sold. This sets the status to EN_LABORATOIRE.
-		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnLaboratoire); err != nil {
-			log.Printf("erreur mise à jour statut en laboratoire pour glass #%d: %v", glass.ID, err)
+		oldLocationID := glass.LocationID
+		if oldLocationID != nil {
+			if err := s.allocation.FreeLocation(*oldLocationID); err != nil {
+				log.Printf("erreur libération emplacement glass #%d: %v", glass.ID, err)
+			}
+		}
+		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusVendue); err != nil {
+			log.Printf("erreur mise à jour statut vendue pour glass #%d: %v", glass.ID, err)
 		}
 		if err := s.glassRepo.ClearLocation(glass.ID); err != nil {
 			log.Printf("erreur vidage emplacement glass #%d: %v", glass.ID, err)
+		}
+		movement := &models.Movement{
+			GlassID:        glass.ID,
+			FromStationID:  &stationID,
+			FromLocationID: oldLocationID,
+			Action:         models.ActionRetraitPresentoir,
+			UserID:         userID,
+		}
+		if err := s.movementRepo.Create(movement); err != nil {
+			log.Printf("erreur création mouvement vente glass #%d: %v", glass.ID, err)
 		}
 
 		item := &models.SaleItem{SaleID: sale.ID, GlassID: glass.ID}
@@ -95,11 +112,30 @@ func (s *ReserveService) CreateReserve(stationID int64, barcodes []string, userI
 			continue
 		}
 
+		oldLocationID := glass.LocationID
+		if oldLocationID != nil {
+			if err := s.allocation.FreeLocation(*oldLocationID); err != nil {
+				log.Printf("erreur libération emplacement glass #%d: %v", glass.ID, err)
+			}
+		}
 		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusReservee); err != nil {
 			log.Printf("erreur mise à jour statut réservée pour glass #%d: %v", glass.ID, err)
 		}
 		if err := s.glassRepo.UpdateReservedState(glass.ID, true); err != nil {
 			log.Printf("erreur marquage réservation glass #%d: %v", glass.ID, err)
+		}
+		if err := s.glassRepo.ClearLocation(glass.ID); err != nil {
+			log.Printf("erreur vidage emplacement glass #%d: %v", glass.ID, err)
+		}
+		movement := &models.Movement{
+			GlassID:        glass.ID,
+			FromStationID:  &stationID,
+			FromLocationID: oldLocationID,
+			Action:         models.ActionReservation,
+			UserID:         userID,
+		}
+		if err := s.movementRepo.Create(movement); err != nil {
+			log.Printf("erreur création mouvement réserve glass #%d: %v", glass.ID, err)
 		}
 
 		item := &models.ReserveItem{ReserveID: reserve.ID, GlassID: glass.ID}

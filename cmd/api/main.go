@@ -98,8 +98,8 @@ func main() {
 	deliverySvc := services.NewDeliveryService(deliveryRepo, glassRepo, movementSvc)
 	saleRepo := repositories.NewSaleRepository(db)
 	reserveRepo := repositories.NewReserveRepository(db)
-	saleSvc := services.NewSaleService(saleRepo, glassRepo)
-	reserveSvc := services.NewReserveService(reserveRepo, glassRepo)
+	saleSvc := services.NewSaleService(saleRepo, glassRepo, movementRepo, allocationSvc)
+	reserveSvc := services.NewReserveService(reserveRepo, glassRepo, movementRepo, allocationSvc)
 	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
@@ -125,6 +125,7 @@ func main() {
 	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo)
 	saleHandler := inventoryHandlers.NewSaleHandler(saleSvc)
 	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc)
+	presentoirHandler := inventoryHandlers.NewPresentoirHandler(locationRepo)
 	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
@@ -259,6 +260,10 @@ func main() {
 			reserves := inventory.Group("/reserves")
 			{
 				reserves.POST("", reserveHandler.CreateReserve)
+			}
+			presentoir := inventory.Group("/presentoir")
+			{
+				presentoir.GET("/empty-slots", presentoirHandler.EmptySlotsToday)
 			}
 		}
 	}
