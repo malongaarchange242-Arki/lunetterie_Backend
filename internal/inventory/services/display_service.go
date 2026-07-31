@@ -87,9 +87,9 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 // station (zone STOCK), sans la mettre sur le présentoir. Reflète TransferService.ReceiveItem,
 // mais déclenché ici automatiquement par la simple recherche du code-barres.
 func (s *DisplayService) receiveIntoLocalStock(glass *models.Glass, stationID, userID int64) error {
-	location, err := s.allocation.FindFreeLocation(stationID, models.ZoneStock)
+	location, err := s.allocation.FindOrCreateStockLocation(stationID)
 	if err != nil {
-		log.Printf("⚠️  Aucun emplacement de stock libre pour la réception de la monture #%d: %v", glass.ID, err)
+		log.Printf("⚠️  Impossible d'assigner un emplacement de stock pour la réception de la monture #%d: %v", glass.ID, err)
 		return nil
 	}
 

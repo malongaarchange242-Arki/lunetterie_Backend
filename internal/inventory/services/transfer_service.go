@@ -181,7 +181,7 @@ func (s *TransferService) ReceiveItem(transferID int64, barcode string, userID i
 		return nil, nil, nil, nil, fmt.Errorf("cette monture a déjà été réceptionnée")
 	}
 
-	location, err := s.allocation.FindFreeLocation(transfer.ToStationID, models.ZoneStock)
+	location, err := s.allocation.FindOrCreateStockLocation(transfer.ToStationID)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("erreur allocation emplacement: %w", err)
 	}
