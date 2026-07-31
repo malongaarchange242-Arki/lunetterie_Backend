@@ -130,6 +130,13 @@ func (s *TransferService) Dispatch(transferID int64, userID int64) (*models.Tran
 		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnTransit); err != nil {
 			return nil, fmt.Errorf("impossible de mettre à jour le statut de la monture #%d: %w", glass.ID, err)
 		}
+		// Basculé tout de suite après le statut de la monture (et non en un seul lot après la
+		// boucle) : si un item suivant du même transfert échoue, celui-ci reste cohérent
+		// (monture EN_TRANSIT + ligne de transfert IN_TRANSIT ensemble), au lieu de laisser la
+		// monture EN_TRANSIT avec une ligne de transfert restée PENDING pour toujours.
+		if err := s.transferRepo.MarkItemInTransit(item.ID); err != nil {
+			return nil, fmt.Errorf("impossible de marquer la monture #%d en transit: %w", glass.ID, err)
+		}
 
 		movement := &models.Movement{
 			GlassID:        glass.ID,
@@ -144,9 +151,6 @@ func (s *TransferService) Dispatch(transferID int64, userID int64) (*models.Tran
 		}
 	}
 
-	if err := s.transferRepo.MarkItemsInTransit(transferID); err != nil {
-		return nil, err
-	}
 	if err := s.transferRepo.UpdateStatus(transferID, models.TransferStatusInTransit); err != nil {
 		return nil, err
 	}
