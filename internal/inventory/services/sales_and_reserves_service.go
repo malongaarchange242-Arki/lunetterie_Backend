@@ -35,10 +35,7 @@ func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int6
 		return nil, fmt.Errorf("aucune monture sélectionnée")
 	}
 
-	sale := &models.Sale{
-		StationID: stationID,
-		UserID:    userID,
-	}
+	sale := &models.Sale{StationID: stationID, UserID: userID}
 	if err := s.saleRepo.Create(sale); err != nil {
 		return nil, err
 	}
@@ -61,17 +58,19 @@ func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int6
 				log.Printf("erreur libération emplacement glass #%d: %v", glass.ID, err)
 			}
 		}
-		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusVendue); err != nil {
-			log.Printf("erreur mise à jour statut vendue pour glass #%d: %v", glass.ID, err)
+
+		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnLaboratoire); err != nil {
+			log.Printf("erreur mise à jour statut en laboratoire pour glass #%d: %v", glass.ID, err)
 		}
 		if err := s.glassRepo.ClearLocation(glass.ID); err != nil {
 			log.Printf("erreur vidage emplacement glass #%d: %v", glass.ID, err)
 		}
+
 		movement := &models.Movement{
 			GlassID:        glass.ID,
 			FromStationID:  &stationID,
 			FromLocationID: oldLocationID,
-			Action:         models.ActionRetraitPresentoir,
+			Action:         models.ActionEnvoiLaboratoire,
 			UserID:         userID,
 		}
 		if err := s.movementRepo.Create(movement); err != nil {
@@ -92,10 +91,7 @@ func (s *ReserveService) CreateReserve(stationID int64, barcodes []string, userI
 		return nil, fmt.Errorf("aucune monture sélectionnée")
 	}
 
-	reserve := &models.Reserve{
-		StationID: stationID,
-		UserID:    userID,
-	}
+	reserve := &models.Reserve{StationID: stationID, UserID: userID}
 	if err := s.reserveRepo.Create(reserve); err != nil {
 		return nil, err
 	}
@@ -118,6 +114,7 @@ func (s *ReserveService) CreateReserve(stationID int64, barcodes []string, userI
 				log.Printf("erreur libération emplacement glass #%d: %v", glass.ID, err)
 			}
 		}
+
 		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusReservee); err != nil {
 			log.Printf("erreur mise à jour statut réservée pour glass #%d: %v", glass.ID, err)
 		}
@@ -127,6 +124,7 @@ func (s *ReserveService) CreateReserve(stationID int64, barcodes []string, userI
 		if err := s.glassRepo.ClearLocation(glass.ID); err != nil {
 			log.Printf("erreur vidage emplacement glass #%d: %v", glass.ID, err)
 		}
+
 		movement := &models.Movement{
 			GlassID:        glass.ID,
 			FromStationID:  &stationID,

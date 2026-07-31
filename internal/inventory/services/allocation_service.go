@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -57,6 +58,13 @@ func genericLocationCode(seq int) string {
 	return fmt.Sprintf("RAYON-%s-ETA-%02d-BAC-%s-POS-%02d", rayon, etagere, bac, position)
 }
 
+// presentoirLocationCode génère un code lisible et stable pour les emplacements de la zone PRESENTOIR.
+// Exemple : PRESENTOIR-2026-0001, PRESENTOIR-2026-0002, etc.
+func presentoirLocationCode(seq int) string {
+	year := time.Now().Year()
+	return fmt.Sprintf("PRESENTOIR-%d-%04d", year, seq)
+}
+
 // findOrCreateLocation trouve un emplacement libre dans une zone donnée pour une station, ou en
 // crée un à la volée (même format de code que le générateur d'emplacements) si aucun n'existe
 // encore pour cette station/zone — utile car le générateur n'est pas systématiquement lancé pour
@@ -74,6 +82,9 @@ func (s *AllocationService) findOrCreateLocation(stationID int64, zone models.Zo
 	// Petite boucle de retry en cas de course (deux créations concurrentes sur le même rang).
 	for attempt := 1; attempt <= 5; attempt++ {
 		code := genericLocationCode(count + attempt)
+		if zone == models.ZonePresentoir {
+			code = presentoirLocationCode(count + attempt)
+		}
 
 		var location models.StorageLocation
 		query := `
