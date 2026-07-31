@@ -96,6 +96,10 @@ func main() {
 	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	deliveryRepo := repositories.NewDeliveryRepository(db)
 	deliverySvc := services.NewDeliveryService(deliveryRepo, glassRepo, movementSvc)
+	saleRepo := repositories.NewSaleRepository(db)
+	reserveRepo := repositories.NewReserveRepository(db)
+	saleSvc := services.NewSaleService(saleRepo, glassRepo)
+	reserveSvc := services.NewReserveService(reserveRepo, glassRepo)
 	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
@@ -119,6 +123,8 @@ func main() {
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
 	// Delivery handler
 	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo)
+	saleHandler := inventoryHandlers.NewSaleHandler(saleSvc)
+	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc)
 	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
@@ -244,6 +250,15 @@ func main() {
 				// POST /api/v1/inventory/deliveries
 				// body: { station_id, barcodes: [...] }
 				deliveries.POST("", deliveryHandler.CreateDelivery)
+			}
+
+			sales := inventory.Group("/sales")
+			{
+				sales.POST("", saleHandler.CreateSale)
+			}
+			reserves := inventory.Group("/reserves")
+			{
+				reserves.POST("", reserveHandler.CreateReserve)
 			}
 		}
 	}

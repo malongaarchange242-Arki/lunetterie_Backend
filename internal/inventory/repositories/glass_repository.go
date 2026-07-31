@@ -206,3 +206,13 @@ func (r *GlassRepository) UpdateAnalysis(glassID int64, analysisID int64) error 
 	_, err := r.db.Exec(query, analysisID, glassID)
 	return err
 }
+
+// UpdateReservedState met à jour l'état réservé d'une monture
+func (r *GlassRepository) UpdateReservedState(glassID int64, reserved bool) error {
+	query := `
+        UPDATE glasses 
+        SET is_reserved = $1, updated_at = NOW() 
+        WHERE id = $2`
+	_, err := r.db.Exec(query, reserved, glassID)
+	return err
+}
