@@ -25,8 +25,6 @@ func NewReserveHandler(service *services.ReserveService) *ReserveHandler {
 	return &ReserveHandler{service: service}
 }
 
-
-
 func (h *SaleHandler) CreateSale(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {

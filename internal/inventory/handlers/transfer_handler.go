@@ -22,7 +22,6 @@ func NewTransferHandler(service *services.TransferService, glassRepo *repositori
 	return &TransferHandler{service: service, glassRepo: glassRepo}
 }
 
-
 func toTransferResponse(t *models.Transfer, items []models.TransferItem, glassRepo *repositories.GlassRepository) dto.TransferResponse {
 	resp := dto.TransferResponse{
 		ID:            t.ID,

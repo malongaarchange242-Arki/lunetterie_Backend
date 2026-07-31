@@ -51,8 +51,11 @@ func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int6
 			continue
 		}
 
-		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusVendue); err != nil {
-			log.Printf("erreur mise à jour statut vendue pour glass #%d: %v", glass.ID, err)
+		// For a "Vendre" action from Présentoir we mark the glass as en laboratoire
+		// so the backend keeps it available for lab processing rather than marking
+		// it immediately as sold. This sets the status to EN_LABORATOIRE.
+		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnLaboratoire); err != nil {
+			log.Printf("erreur mise à jour statut en laboratoire pour glass #%d: %v", glass.ID, err)
 		}
 		if err := s.glassRepo.ClearLocation(glass.ID); err != nil {
 			log.Printf("erreur vidage emplacement glass #%d: %v", glass.ID, err)
