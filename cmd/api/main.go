@@ -158,6 +158,9 @@ func main() {
 	router.StaticFile("/scan.html", filepath.Join(frontendDir, "scan.html"))
 	router.StaticFile("/scan.css", filepath.Join(frontendDir, "scan.css"))
 	router.StaticFile("/scan.js", filepath.Join(frontendDir, "scan.js"))
+	router.StaticFile("/direction.html", filepath.Join(frontendDir, "direction.html"))
+	router.StaticFile("/direction.css", filepath.Join(frontendDir, "direction.css"))
+	router.StaticFile("/direction.js", filepath.Join(frontendDir, "direction.js"))
 	router.StaticFile("/reception.html", filepath.Join(frontendDir, "reception.html"))
 	router.StaticFile("/reception.js", filepath.Join(frontendDir, "reception.js"))
 
