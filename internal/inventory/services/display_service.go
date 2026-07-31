@@ -34,13 +34,8 @@ var placeableStatuses = map[models.GlassStatus]bool{
 	models.StatusEnLaboratoire: true,
 }
 
-// PlaceOnDisplay est déclenché par la recherche d'un code-barres au poste Présentoir : la
-// monture passe automatiquement au statut EN_PRESENTOIR et reçoit un emplacement dédié à la
-// zone présentoir de ce poste (le code-barres est conservé tel quel). Si elle se trouvait sur
-// un autre poste, elle y est rattachée directement — le scan vaut confirmation physique de sa
-// présence sur le présentoir. Si elle est déjà exposée à ce poste, ou dans un statut non
-// éligible (réservée, vendue...), l'appel est un no-op : la recherche reste alors une simple
-// consultation.
+// PlaceOnDisplay est déclenché par la recherche d'un code-barres sur presentoir.html, quel que
+// soit le poste (Présentoir, Laboratoire, ou un magasin "station" comme Station Pointe-Noire).
 //
 // Cas EN_TRANSIT (monture envoyée par transfert, ex: depuis scan.html) : le scan vaut
 // confirmation d'arrivée dans la grande majorité des cas — SAUF si un transfert actif existe
@@ -52,9 +47,14 @@ var placeableStatuses = map[models.GlassStatus]bool{
 //     (pas de notion de "stock" intermédiaire pour ce poste).
 //   - Vers un magasin normal : le scan clôture le transfert (et le transfert entier si c'était la
 //     dernière monture) et fait atterrir la monture en stock local (EN_STOCK_SOUS_STATION) avec
-//     un emplacement de zone STOCK — PAS en présentoir. La mise en présentoir est une étape
-//     distincte, déclenchée par un scan ultérieur une fois la monture déjà en stock local (elle
-//     devient alors éligible via placeableStatuses, comme n'importe quelle monture en stock).
+//     un emplacement de zone STOCK — PAS en présentoir.
+//
+// Pour tout autre statut (déjà en stock, déjà exposée ailleurs...) : la mise en présentoir/labo
+// automatique ne se déclenche QUE si le poste scanné est lui-même le poste dédié Présentoir ou
+// Laboratoire. À un poste "station" (magasin), rechercher une monture reste une simple
+// consultation — aucun changement de statut. Faire passer une monture de "en stock local" à "sur
+// le présentoir" depuis un magasin se fait explicitement via le bouton "Envoyer" (transfert réel
+// vers le poste Présentoir), pas par une simple recherche.
 //
 // Le retour (string, error) renvoie en 2e position une erreur réelle (ex: monture introuvable),
 // et en 1re position une note explicative facultative quand l'appel n'a rien changé (ex: "en
@@ -78,6 +78,14 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 			return note, nil
 		}
 		return "", s.receiveIntoLocalStock(glass, stationID, userID)
+	}
+
+	// La mise en présentoir/labo automatique au scan ne s'applique qu'aux postes dédiés
+	// (Présentoir, Laboratoire). À un poste "station" (magasin, ex: Station Pointe-Noire),
+	// rechercher une monture déjà en stock local reste une simple consultation — le passage au
+	// présentoir se fait explicitement via le bouton "Envoyer" (transfert réel vers Présentoir).
+	if !s.isPresentoirStation(stationID) && !s.isLaboratoireStation(stationID) {
+		return "", nil
 	}
 
 	if !placeableStatuses[glass.Status] {
@@ -224,14 +232,22 @@ func (s *DisplayService) stationDisplayName(stationID int64) string {
 }
 
 func (s *DisplayService) isLaboratoireStation(stationID int64) bool {
+	return s.stationNameEquals(stationID, "Laboratoire")
+}
+
+func (s *DisplayService) isPresentoirStation(stationID int64) bool {
+	return s.stationNameEquals(stationID, "Présentoir")
+}
+
+func (s *DisplayService) stationNameEquals(stationID int64, name string) bool {
 	if s.stationRepo == nil {
 		return false
 	}
 
 	station, err := s.stationRepo.GetByID(stationID)
 	if err != nil {
-		log.Printf("⚠️  Impossible de récupérer la station #%d pour détection laboratoire: %v", stationID, err)
+		log.Printf("⚠️  Impossible de récupérer la station #%d: %v", stationID, err)
 		return false
 	}
-	return strings.EqualFold(strings.TrimSpace(station.Name), "Laboratoire")
+	return strings.EqualFold(strings.TrimSpace(station.Name), name)
 }
