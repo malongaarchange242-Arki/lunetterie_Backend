@@ -43,11 +43,12 @@ var placeableStatuses = map[models.GlassStatus]bool{
 // pas laisser un poste récupérer une monture destinée ailleurs. Une monture EN_TRANSIT sans
 // aucun transfert actif retrouvé (jamais créé via le vrai circuit, données de test...) n'est
 // PAS bloquée : mieux vaut recevoir la monture que la laisser bloquée sans recours dans l'app.
-//   - Vers le Laboratoire : le scan vaut à la fois réception et mise en labo, en une seule action
-//     (pas de notion de "stock" intermédiaire pour ce poste).
-//   - Vers un magasin normal : le scan clôture le transfert (et le transfert entier si c'était la
-//     dernière monture) et fait atterrir la monture en stock local (EN_STOCK_SOUS_STATION) avec
-//     un emplacement de zone STOCK — PAS en présentoir.
+//   - Vers le Présentoir ou le Laboratoire : le scan vaut à la fois réception et mise en
+//     présentoir/labo, en une seule action (pas de notion de "stock" intermédiaire pour ces
+//     postes dédiés — tout ce qui y arrive est destiné à l'exposition/au traitement direct).
+//   - Vers un magasin "station" (ex: Station Pointe-Noire) : le scan clôture le transfert (et le
+//     transfert entier si c'était la dernière monture) et fait atterrir la monture en stock
+//     local (EN_STOCK_SOUS_STATION) avec un emplacement de zone STOCK — PAS en présentoir.
 //
 // Pour tout autre statut (déjà en stock, déjà exposée ailleurs...) : la mise en présentoir/labo
 // automatique ne se déclenche QUE si le poste scanné est lui-même le poste dédié Présentoir ou
@@ -70,12 +71,15 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 	}
 
 	if glass.Status == models.StatusEnTransit {
-		if s.isLaboratoireStation(stationID) {
-			return "", s.placeGlass(glass, stationID, userID)
-		}
 		note, blocking := s.completeTransferReception(glass.ID, stationID, userID)
 		if blocking {
 			return note, nil
+		}
+		// Le Présentoir et le Laboratoire n'ont pas de "stock local" distinct de l'exposition :
+		// l'arrivée y vaut mise en présentoir/labo directe, en une seule étape. Un magasin
+		// "station" (ex: Station Pointe-Noire) atterrit d'abord en stock local (deux étapes).
+		if s.isPresentoirStation(stationID) || s.isLaboratoireStation(stationID) {
+			return "", s.placeGlass(glass, stationID, userID)
 		}
 		return "", s.receiveIntoLocalStock(glass, stationID, userID)
 	}
