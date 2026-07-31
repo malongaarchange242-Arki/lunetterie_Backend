@@ -34,3 +34,13 @@ func (r *StationRepository) GetByID(id int64) (*models.Station, error) {
 	}
 	return &station, nil
 }
+
+// FindByName récupère une station par son nom exact (ex: "Laboratoire", "Présentoir")
+func (r *StationRepository) FindByName(name string) (*models.Station, error) {
+	var station models.Station
+	query := `SELECT id, name, type, city, address, phone, is_active, created_at FROM stations WHERE name = $1`
+	if err := r.db.Get(&station, query, name); err != nil {
+		return nil, fmt.Errorf("station introuvable: %w", err)
+	}
+	return &station, nil
+}

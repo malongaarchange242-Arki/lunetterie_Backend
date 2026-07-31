@@ -98,7 +98,7 @@ func main() {
 	deliverySvc := services.NewDeliveryService(deliveryRepo, glassRepo, movementSvc)
 	saleRepo := repositories.NewSaleRepository(db)
 	reserveRepo := repositories.NewReserveRepository(db)
-	saleSvc := services.NewSaleService(saleRepo, glassRepo, movementRepo, allocationSvc)
+	saleSvc := services.NewSaleService(saleRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	reserveSvc := services.NewReserveService(reserveRepo, glassRepo, movementRepo, allocationSvc)
 	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")

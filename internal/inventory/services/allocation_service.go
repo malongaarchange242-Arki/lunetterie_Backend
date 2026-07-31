@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -58,11 +57,17 @@ func genericLocationCode(seq int) string {
 	return fmt.Sprintf("RAYON-%s-ETA-%02d-BAC-%s-POS-%02d", rayon, etagere, bac, position)
 }
 
-// presentoirLocationCode génère un code lisible et stable pour les emplacements de la zone PRESENTOIR.
-// Exemple : PRESENTOIR-2026-0001, PRESENTOIR-2026-0002, etc.
+// presentoirPositionsPerUnit détermine à partir de combien d'emplacements on numérote un
+// nouveau meuble présentoir (PR01, PR02, ...) plutôt que d'ajouter une position au même meuble.
+const presentoirPositionsPerUnit = 20
+
+// presentoirLocationCode génère un code "meuble-position" pour les emplacements de la zone
+// PRESENTOIR, ex: PR01-1, PR01-2, ..., PR01-20, PR02-1, ... — cohérent avec le format affiché
+// à l'écran vendeur (Présentoir : PR03, Position : 12 -> Emplacement : PR03-12).
 func presentoirLocationCode(seq int) string {
-	year := time.Now().Year()
-	return fmt.Sprintf("PRESENTOIR-%d-%04d", year, seq)
+	unit := (seq-1)/presentoirPositionsPerUnit + 1
+	position := (seq-1)%presentoirPositionsPerUnit + 1
+	return fmt.Sprintf("PR%02d-%d", unit, position)
 }
 
 // findOrCreateLocation trouve un emplacement libre dans une zone donnée pour une station, ou en
