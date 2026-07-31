@@ -29,11 +29,11 @@ func (h *PresentoirHandler) EmptySlotsToday(c *gin.Context) {
 		return
 	}
 
-	codes, err := h.locationRepo.FindEmptyPresentoirSlotsToday(stationID)
+	slots, err := h.locationRepo.FindEmptyPresentoirSlotsToday(stationID)
 	if err != nil {
 		shared.InternalError(c, "Impossible de récupérer les emplacements vides")
 		return
 	}
 
-	shared.Success(c, http.StatusOK, gin.H{"slots": codes})
+	shared.Success(c, http.StatusOK, gin.H{"slots": slots})
 }

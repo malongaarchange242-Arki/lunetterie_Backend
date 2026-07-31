@@ -150,3 +150,12 @@ type Supplier struct {
 }
 
 // NOTE: Delivery model moved to models/delivery.go
+
+// EmptySlot représente un emplacement présentoir devenu libre aujourd'hui, avec la monture qui
+// l'occupait (vendue ou réservée) — pour savoir quoi remettre en place et où.
+type EmptySlot struct {
+	Code      string  `db:"code" json:"code"`
+	Barcode   string  `db:"barcode" json:"barcode"`
+	Reference *string `db:"reference" json:"reference,omitempty"`
+	Brand     *string `db:"brand" json:"brand,omitempty"`
+}
