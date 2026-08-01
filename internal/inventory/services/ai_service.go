@@ -121,7 +121,7 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 	// CreateFormFile fixe toujours Content-Type: application/octet-stream, ce que le service
 	// Python rejette (il exige un type MIME "image/...") : on construit la part manuellement.
 	header := make(textproto.MIMEHeader)
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image"; filename="%s"`, filename))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
 	header.Set("Content-Type", contentType)
 	part, err := writer.CreatePart(header)
 	if err != nil {
@@ -195,7 +195,7 @@ func (s *AIService) AnalyzeBranche(imageBytes []byte, filename string, contentTy
 	writer := multipart.NewWriter(body)
 
 	header := make(textproto.MIMEHeader)
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image"; filename="%s"`, filename))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
 	header.Set("Content-Type", contentType)
 	part, err := writer.CreatePart(header)
 	if err != nil {
