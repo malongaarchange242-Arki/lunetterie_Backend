@@ -103,6 +103,7 @@ func main() {
 	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
+	similaritySvc := services.NewSimilarityService(glassRepo)
 
 	// Initialiser les workflows
 	receptionWorkflow := workflows.NewReceptionWorkflow(
@@ -127,7 +128,7 @@ func main() {
 	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc)
 	presentoirHandler := inventoryHandlers.NewPresentoirHandler(locationRepo)
 	movementHandler := inventoryHandlers.NewMovementHandler(movementRepo)
-	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc)
+	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
@@ -235,8 +236,10 @@ func main() {
 		{
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
+			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
 			inventory.GET("/glasses", glassHandler.ListGlasses)
 			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
+			inventory.GET("/glasses/:barcode/similar", glassHandler.GetSimilarGlasses)
 			inventory.GET("/stock-summary", glassHandler.GetStockSummary)
 			storage := inventory.Group("/storage")
 			{

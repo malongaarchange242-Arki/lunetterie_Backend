@@ -157,6 +157,37 @@ func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassList
 	return &item, nil
 }
 
+// availableStatuses liste les statuts d'une monture pouvant être proposée comme alternative à
+// un client (en stock ou exposée) — à l'exclusion des montures réservées, en transit, en
+// laboratoire ou déjà sorties du stock actif (vendue, perdue, cassée, retournée).
+var availableStatuses = []string{
+	string(models.StatusEnStockGeneral),
+	string(models.StatusEnStockSousStation),
+	string(models.StatusEnPresentoir),
+}
+
+// FindAvailableExcluding liste les montures disponibles (hors réservées/vendues/etc.), à
+// l'exclusion d'une monture donnée — utilisé pour chercher des alternatives similaires à une
+// monture de référence.
+func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.GlassListItem, error) {
+	items := []models.GlassListItem{}
+	query := `
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.status = ANY($1) AND g.id != $2
+		ORDER BY g.created_at DESC`
+	if err := r.db.Select(&items, query, pq.Array(availableStatuses), excludeID); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures disponibles: %w", err)
+	}
+	return items, nil
+}
+
 // UpdateStatus met à jour le statut d'une monture
 func (r *GlassRepository) UpdateStatus(glassID int64, status models.GlassStatus) error {
 	query := `

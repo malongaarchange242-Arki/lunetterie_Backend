@@ -36,10 +36,19 @@ type rawAnalysisResponse struct {
 	Material     string  `json:"material"`
 	HasBranches  bool    `json:"has_branches"`
 	MountType    string  `json:"mount_type"`
+	Gender       *string `json:"gender"`
 	ProductFiche struct {
 		Brand     *string `json:"brand"`
 		Reference *string `json:"reference"`
 	} `json:"product_fiche"`
+}
+
+// rawBrancheOCRResponse reflète le schéma renvoyé par POST /glasses/analyze-branche
+// (app/ai/claude_vision.py, ocr_branche) : lecture du texte gravé sur la branche.
+type rawBrancheOCRResponse struct {
+	Reference  *string `json:"reference"`
+	Brand      *string `json:"brand"`
+	Confidence float64 `json:"confidence"`
 }
 
 var shapeTranslation = map[string]string{
@@ -112,7 +121,7 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 	// CreateFormFile fixe toujours Content-Type: application/octet-stream, ce que le service
 	// Python rejette (il exige un type MIME "image/...") : on construit la part manuellement.
 	header := make(textproto.MIMEHeader)
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="imagge"; filename="%s"`, filename))
 	header.Set("Content-Type", contentType)
 	part, err := writer.CreatePart(header)
 	if err != nil {
@@ -151,8 +160,8 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 	}
 
 	// Le pipeline ne renvoie qu'une confiance globale (pas une par attribut) : on la réutilise
-	// pour les 4 champs. Gender/Size ne sont pas déduits par ce pipeline : laissés vides,
-	// l'utilisateur les renseigne manuellement à l'étape de vérification.
+	// pour les 4 champs. Size n'est pas déduit par ce pipeline : laissé vide, l'utilisateur le
+	// renseigne manuellement à l'étape de vérification.
 	confidence := raw.Confidence * 100
 	result := &dto.AnalysisResult{
 		Shape:     translate(shapeTranslation, raw.FrameShape),
@@ -164,6 +173,11 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 		MountType: translate(mountTypeTranslation, raw.MountType),
 		MountConf: confidence,
 	}
+	// Gender vient de Claude vision (app/ai/claude_vision.py) déjà en français ("Homme",
+	// "Femme", "Enfant", "Unisexe") : pas de table de traduction nécessaire.
+	if raw.Gender != nil {
+		result.Gender = *raw.Gender
+	}
 	if raw.ProductFiche.Brand != nil {
 		result.Brand = *raw.ProductFiche.Brand
 	}
@@ -171,5 +185,60 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 		result.Reference = *raw.ProductFiche.Reference
 	}
 
+	return result, nil
+}
+
+// AnalyzeBranche envoie la photo de la branche au service IA pour OCR de la référence et de
+// la marque (Claude vision) — utilisé à l'étape 2 de scan.html, séparément de la photo de face.
+func (s *AIService) AnalyzeBranche(imageBytes []byte, filename string, contentType string) (*dto.AnalysisResult, error) {
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image"; filename="%s"`, filename))
+	header.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		return nil, fmt.Errorf("erreur création form: %w", err)
+	}
+	if _, err := io.Copy(part, bytes.NewReader(imageBytes)); err != nil {
+		return nil, fmt.Errorf("erreur copie image: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("erreur fermeture writer: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, s.baseURL+"/glasses/analyze-branche", body)
+	if err != nil {
+		return nil, fmt.Errorf("erreur création requête IA: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("service IA injoignable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erreur lecture réponse IA: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("erreur service IA (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var raw rawBrancheOCRResponse
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return nil, fmt.Errorf("réponse IA invalide: %w", err)
+	}
+
+	result := &dto.AnalysisResult{}
+	if raw.Reference != nil {
+		result.Reference = *raw.Reference
+	}
+	if raw.Brand != nil {
+		result.Brand = *raw.Brand
+	}
 	return result, nil
 }

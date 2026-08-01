@@ -48,3 +48,34 @@ func (h *AnalyzeHandler) HandleAnalyze(c *gin.Context) {
 
 	shared.Success(c, 200, result)
 }
+
+// HandleAnalyzeBranche analyse une photo de branche et renvoie la référence/marque lues par OCR
+// POST /api/v1/inventory/analyze-branche
+func (h *AnalyzeHandler) HandleAnalyzeBranche(c *gin.Context) {
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		shared.BadRequest(c, "Image requise")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
+		shared.BadRequest(c, "Format d'image non supporté (JPEG, PNG ou WebP requis)")
+		return
+	}
+
+	imageBytes, err := io.ReadAll(file)
+	if err != nil {
+		shared.BadRequest(c, "Erreur lecture image")
+		return
+	}
+
+	result, err := h.aiService.AnalyzeBranche(imageBytes, header.Filename, contentType)
+	if err != nil {
+		shared.InternalError(c, "Erreur lors de l'analyse: "+err.Error())
+		return
+	}
+
+	shared.Success(c, 200, result)
+}

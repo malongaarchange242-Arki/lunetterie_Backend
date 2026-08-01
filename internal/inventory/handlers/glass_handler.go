@@ -13,13 +13,14 @@ import (
 
 // GlassHandler gère la consultation des montures en stock
 type GlassHandler struct {
-	repo    *repositories.GlassRepository
-	display *services.DisplayService
+	repo       *repositories.GlassRepository
+	display    *services.DisplayService
+	similarity *services.SimilarityService
 }
 
 // NewGlassHandler crée une nouvelle instance
-func NewGlassHandler(repo *repositories.GlassRepository, display *services.DisplayService) *GlassHandler {
-	return &GlassHandler{repo: repo, display: display}
+func NewGlassHandler(repo *repositories.GlassRepository, display *services.DisplayService, similarity *services.SimilarityService) *GlassHandler {
+	return &GlassHandler{repo: repo, display: display, similarity: similarity}
 }
 
 // ListGlasses liste les montures filtrées par statut, pour une station donnée,
@@ -103,4 +104,36 @@ func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 		response["placement_note"] = placementNote
 	}
 	shared.Success(c, http.StatusOK, response)
+}
+
+// GetSimilarGlasses classe les montures disponibles par ressemblance (genre, forme, prix) avec
+// la monture identifiée par code-barres — pour proposer une alternative quand elle est
+// indisponible, ou simplement suggérer des montures proches.
+// GET /api/v1/inventory/glasses/:barcode/similar?limit=10
+func (h *GlassHandler) GetSimilarGlasses(c *gin.Context) {
+	barcode := c.Param("barcode")
+
+	reference, err := h.repo.FindDetailByBarcode(barcode)
+	if err != nil {
+		shared.NotFound(c, "Aucune monture ne correspond à ce code-barres")
+		return
+	}
+
+	limit := 10
+	if raw := c.Query("limit"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed <= 0 {
+			shared.BadRequest(c, "limit invalide")
+			return
+		}
+		limit = parsed
+	}
+
+	similar, err := h.similarity.FindSimilar(reference, limit)
+	if err != nil {
+		shared.BadRequest(c, err.Error())
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{"glasses": similar})
 }

@@ -44,6 +44,16 @@ type GlassListItem struct {
 	PhotoBrancheURL *string  `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
 }
 
+// SimilarGlass représente une monture candidate au classement de similarité, avec le score
+// composite (genre/forme/prix) et son détail par critère pour transparence côté UI.
+type SimilarGlass struct {
+	GlassListItem
+	Score      float64 `json:"score"`
+	ScoreGenre float64 `json:"score_genre"`
+	ScoreForme float64 `json:"score_forme"`
+	ScorePrix  float64 `json:"score_prix"`
+}
+
 // StockSummaryItem représente le stock actif (hors vendu/perdu/cassé/retourné) d'une référence,
 // réparti entre Stock Général, Stock Local (station régionale) et Présentoir.
 type StockSummaryItem struct {
