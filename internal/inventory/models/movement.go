@@ -25,11 +25,13 @@ type MovementListItem struct {
 
 // MovementFilters décrit les filtres optionnels de consultation de l'historique des mouvements.
 type MovementFilters struct {
-	StationID *int64
-	Action    *string
-	Barcode   *string
-	DateFrom  *string
-	DateTo    *string
-	Limit     int
-	Offset    int
+	FromStationID *int64
+	ToStationID   *int64
+	Action        *string
+	Barcode       *string
+	UserID        *int64
+	DateFrom      *string
+	DateTo        *string
+	Limit         int
+	Offset        int
 }

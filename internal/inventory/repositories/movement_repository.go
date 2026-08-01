@@ -56,9 +56,13 @@ func (r *MovementRepository) List(filters models.MovementFilters) ([]models.Move
 		WHERE 1=1`
 
 	args := []interface{}{}
-	if filters.StationID != nil {
-		args = append(args, *filters.StationID)
-		base += fmt.Sprintf(" AND (m.from_station_id = $%d OR m.to_station_id = $%d)", len(args), len(args))
+	if filters.FromStationID != nil {
+		args = append(args, *filters.FromStationID)
+		base += fmt.Sprintf(" AND m.from_station_id = $%d", len(args))
+	}
+	if filters.ToStationID != nil {
+		args = append(args, *filters.ToStationID)
+		base += fmt.Sprintf(" AND m.to_station_id = $%d", len(args))
 	}
 	if filters.Action != nil && *filters.Action != "" {
 		args = append(args, *filters.Action)
@@ -67,6 +71,10 @@ func (r *MovementRepository) List(filters models.MovementFilters) ([]models.Move
 	if filters.Barcode != nil && *filters.Barcode != "" {
 		args = append(args, "%"+*filters.Barcode+"%")
 		base += fmt.Sprintf(" AND g.barcode ILIKE $%d", len(args))
+	}
+	if filters.UserID != nil {
+		args = append(args, *filters.UserID)
+		base += fmt.Sprintf(" AND m.user_id = $%d", len(args))
 	}
 	if filters.DateFrom != nil && *filters.DateFrom != "" {
 		args = append(args, *filters.DateFrom)
