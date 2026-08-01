@@ -24,7 +24,8 @@ INSERT INTO roles (name, description) VALUES
     ('MAGASINIER', 'Gestionnaire de stock'),
     ('VENDEUR', 'Vendeur en magasin'),
     ('LABORATOIRE', 'Technicien de laboratoire'),
-    ('RESPONSABLE_STATION', 'Responsable de station')
+    ('RESPONSABLE_STATION', 'Responsable de station'),
+    ('DIRECTION', 'Direction')
 ON CONFLICT DO NOTHING;
 
 -- ============================================
