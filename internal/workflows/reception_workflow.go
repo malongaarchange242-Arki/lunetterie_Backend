@@ -19,6 +19,7 @@ type ReceptionWorkflow struct {
 	barcodeService      *services.BarcodeService
 	analysisService     *services.AnalysisService
 	storageService      *services.StorageService
+	similarityService   *services.SimilarityService
 	glassRepo           *repositories.GlassRepository
 	locationRepo        *repositories.LocationRepository
 	analysisRepo        *repositories.AnalysisRepository
@@ -32,6 +33,7 @@ func NewReceptionWorkflow(
 	barcodeSvc *services.BarcodeService,
 	analysisSvc *services.AnalysisService,
 	storageSvc *services.StorageService,
+	similaritySvc *services.SimilarityService,
 	glassRepo *repositories.GlassRepository,
 	locationRepo *repositories.LocationRepository,
 	analysisRepo *repositories.AnalysisRepository,
@@ -43,6 +45,7 @@ func NewReceptionWorkflow(
 		barcodeService:      barcodeSvc,
 		analysisService:     analysisSvc,
 		storageService:      storageSvc,
+		similarityService:   similaritySvc,
 		glassRepo:           glassRepo,
 		locationRepo:        locationRepo,
 		analysisRepo:        analysisRepo,
@@ -96,9 +99,35 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 	// Étape: Trouver un emplacement libre
 	log.Println("📍 Recherche emplacement libre...")
-	location, err := w.allocationService.FindFreeLocation(req.StationID, models.ZoneStock)
-	if err != nil {
-		return nil, fmt.Errorf("erreur allocation: %w", err)
+	var location *models.StorageLocation
+	var allocErr error
+
+	if req.Gender != nil || req.Shape != nil || req.Price != nil {
+		candidates, err := w.glassRepo.FindByStationAndStatuses(req.StationID, []string{string(models.StatusEnStockGeneral)})
+		if err == nil && len(candidates) > 0 {
+			reference := &models.GlassListItem{
+				Gender: req.Gender,
+				Shape:  req.Shape,
+				Price:  req.Price,
+			}
+			best, score, err := w.similarityService.FindBestMatch(reference, candidates)
+			if err == nil && best != nil && score > 0 {
+				log.Printf("🔎 Meilleure monture similaire trouvée: %s (score %.2f)", best.Barcode, score)
+				if best.LocationCode != nil && *best.LocationCode != "" {
+					location, allocErr = w.allocationService.FindFreeLocationNearCode(req.StationID, models.ZoneStock, *best.LocationCode)
+					if allocErr == nil {
+						log.Printf("✅ Emplacement proche trouvé autour de %s", *best.LocationCode)
+					}
+				}
+			}
+		}
+	}
+
+	if location == nil {
+		location, allocErr = w.allocationService.FindFreeLocation(req.StationID, models.ZoneStock)
+		if allocErr != nil {
+			return nil, fmt.Errorf("erreur allocation: %w", allocErr)
+		}
 	}
 	log.Printf("✅ Emplacement trouvé: %s", location.Code)
 
@@ -228,8 +257,8 @@ func buildAnalysisResult(req dto.ReceptionRequest) *dto.AnalysisResult {
 	if req.Size != nil {
 		result.Size = *req.Size
 	}
-	if req.Brand != nil {
-		result.Brand = *req.Brand
+	if brand := req.EffectiveBrand(); brand != nil {
+		result.Brand = *brand
 	}
 	if req.Reference != nil {
 		result.Reference = *req.Reference

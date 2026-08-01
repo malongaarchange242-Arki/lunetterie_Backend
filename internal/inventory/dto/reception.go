@@ -1,5 +1,7 @@
 package dto
 
+import "strings"
+
 // ReceptionRequest représente la requête de réception d'une monture
 type ReceptionRequest struct {
 	SupplierID  *int64   `json:"supplier_id" form:"supplier_id"`
@@ -10,15 +12,28 @@ type ReceptionRequest struct {
 	// Champs saisis/corrigés manuellement (étape de vérification) : prioritaires sur l'analyse IA.
 	Reference *string `json:"reference" form:"reference"`
 	Brand     *string `json:"brand" form:"brand"`
+	Marque    *string `json:"marque" form:"marque"`
 	Gender    *string `json:"gender" form:"gender"`
 	Shape     *string `json:"shape" form:"shape"`
 	// Forme telle que détectée par l'IA (avant correction éventuelle par l'utilisateur) :
 	// sert uniquement à journaliser les corrections, jamais persistée telle quelle.
 	DetectedShape *string `json:"detected_shape" form:"detected_shape"`
-	Color     *string `json:"color" form:"color"`
-	Size      *string `json:"size" form:"size"`
-	Material  *string `json:"material" form:"material"`
-	MountType *string `json:"mount_type" form:"mount_type"`
+	Color         *string `json:"color" form:"color"`
+	Size          *string `json:"size" form:"size"`
+	Material      *string `json:"material" form:"material"`
+	MountType     *string `json:"mount_type" form:"mount_type"`
+}
+
+// EffectiveBrand retourne la marque effective à enregistrer, en priorisant le champ brand
+// puis le fallback marque pour rester compatible avec les anciens clients.
+func (r *ReceptionRequest) EffectiveBrand() *string {
+	if r.Brand != nil && strings.TrimSpace(*r.Brand) != "" {
+		return r.Brand
+	}
+	if r.Marque != nil && strings.TrimSpace(*r.Marque) != "" {
+		return r.Marque
+	}
+	return nil
 }
 
 // ReceptionResponse représente la réponse après réception

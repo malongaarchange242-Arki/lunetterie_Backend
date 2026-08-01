@@ -112,6 +112,7 @@ func main() {
 		barcodeSvc,
 		analysisSvc,
 		storageSvc,
+		similaritySvc,
 		glassRepo,
 		locationRepo,
 		analysisRepo,

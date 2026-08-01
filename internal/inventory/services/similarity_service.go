@@ -47,36 +47,17 @@ func (s *SimilarityService) FindSimilar(reference *models.GlassListItem, limit i
 
 	results := make([]models.SimilarGlass, 0, len(candidates))
 	for _, candidate := range candidates {
-		var weightSum, total float64
-		var scoreGenre, scoreForme, scorePrix float64
-
-		if reference.Gender != nil && candidate.Gender != nil {
-			scoreGenre = matchGenre(*reference.Gender, *candidate.Gender)
-			weightSum += weightGenre
-			total += weightGenre * scoreGenre
-		}
-		if reference.Shape != nil && candidate.Shape != nil {
-			scoreForme = matchForme(*reference.Shape, *candidate.Shape)
-			weightSum += weightForme
-			total += weightForme * scoreForme
-		}
-		if reference.Price != nil && candidate.Price != nil {
-			scorePrix = simPrix(*reference.Price, *candidate.Price)
-			weightSum += weightPrix
-			total += weightPrix * scorePrix
-		}
-
-		if weightSum == 0 {
-			// Rien de comparable entre la référence et ce candidat (aucun champ commun renseigné).
+		score := s.computeScore(reference, &candidate)
+		if score <= 0 {
 			continue
 		}
 
 		results = append(results, models.SimilarGlass{
 			GlassListItem: candidate,
-			Score:         total / weightSum,
-			ScoreGenre:    scoreGenre,
-			ScoreForme:    scoreForme,
-			ScorePrix:     scorePrix,
+			Score:         score,
+			ScoreGenre:    s.scoreGenre(reference, &candidate),
+			ScoreForme:    s.scoreForme(reference, &candidate),
+			ScorePrix:     s.scorePrix(reference, &candidate),
 		})
 	}
 
@@ -88,6 +69,84 @@ func (s *SimilarityService) FindSimilar(reference *models.GlassListItem, limit i
 		results = results[:limit]
 	}
 	return results, nil
+}
+
+func (s *SimilarityService) FindBestMatch(reference *models.GlassListItem, candidates []models.GlassListItem) (*models.GlassListItem, float64, error) {
+	if reference == nil || (reference.Gender == nil && reference.Shape == nil && reference.Price == nil) {
+		return nil, 0, fmt.Errorf("monture de référence sans genre, forme ni prix renseigné : similarité impossible")
+	}
+
+	var best *models.GlassListItem
+	bestScore := 0.0
+
+	for _, candidate := range candidates {
+		score := s.computeScore(reference, &candidate)
+		if score <= 0 {
+			continue
+		}
+		if candidate.LocationCode == nil || *candidate.LocationCode == "" {
+			continue
+		}
+		if best == nil || score > bestScore {
+			best = &models.GlassListItem{}
+			*best = candidate
+			bestScore = score
+		}
+	}
+
+	if best == nil {
+		return nil, 0, nil
+	}
+	return best, bestScore, nil
+}
+
+func (s *SimilarityService) computeScore(reference, candidate *models.GlassListItem) float64 {
+	var weightSum, total float64
+
+	scoreGenre := s.scoreGenre(reference, candidate)
+	if scoreGenre > 0 {
+		weightSum += weightGenre
+		total += weightGenre * scoreGenre
+	}
+
+	scoreForme := s.scoreForme(reference, candidate)
+	if scoreForme > 0 {
+		weightSum += weightForme
+		total += weightForme * scoreForme
+	}
+
+	scorePrix := s.scorePrix(reference, candidate)
+	if scorePrix > 0 {
+		weightSum += weightPrix
+		total += weightPrix * scorePrix
+	}
+
+	if weightSum == 0 {
+		return 0
+	}
+
+	return total / weightSum
+}
+
+func (s *SimilarityService) scoreGenre(reference, candidate *models.GlassListItem) float64 {
+	if reference.Gender == nil || candidate.Gender == nil {
+		return 0
+	}
+	return matchGenre(*reference.Gender, *candidate.Gender)
+}
+
+func (s *SimilarityService) scoreForme(reference, candidate *models.GlassListItem) float64 {
+	if reference.Shape == nil || candidate.Shape == nil {
+		return 0
+	}
+	return matchForme(*reference.Shape, *candidate.Shape)
+}
+
+func (s *SimilarityService) scorePrix(reference, candidate *models.GlassListItem) float64 {
+	if reference.Price == nil || candidate.Price == nil {
+		return 0
+	}
+	return simPrix(*reference.Price, *candidate.Price)
 }
 
 // matchGenre compare deux genres : identiques -> 1, l'un des deux UNISEXE -> 0.5 (compatible),

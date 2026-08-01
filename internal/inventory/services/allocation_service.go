@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -36,6 +37,48 @@ func (s *AllocationService) FindFreeLocation(stationID int64, zone models.ZoneTy
 	}
 
 	// Marquer l'emplacement comme occupé
+	_, err = s.db.Exec(
+		"UPDATE storage_locations SET status = 'OCCUPE' WHERE id = $1",
+		location.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("impossible de réserver l'emplacement: %w", err)
+	}
+
+	return &location, nil
+}
+
+func codePrefix(code string) string {
+	parts := strings.Split(code, "-")
+	if len(parts) >= 6 {
+		return strings.Join(parts[:6], "-")
+	}
+	return code
+}
+
+func (s *AllocationService) FindFreeLocationNearCode(stationID int64, zone models.ZoneType, baseCode string) (*models.StorageLocation, error) {
+	prefix := codePrefix(baseCode)
+	if prefix == "" {
+		return nil, fmt.Errorf("code de référence invalide")
+	}
+
+	query := `
+		SELECT id, station_id, code, type, zone, status
+		FROM storage_locations
+		WHERE station_id = $1
+		  AND zone = $2
+		  AND status = 'LIBRE'
+		  AND type = 'POSITION'
+		  AND code LIKE $3
+		ORDER BY code
+		LIMIT 1`
+
+	var location models.StorageLocation
+	err := s.db.Get(&location, query, stationID, zone, prefix+"-%")
+	if err != nil {
+		return nil, fmt.Errorf("aucun emplacement libre proche de %s: %w", baseCode, err)
+	}
+
 	_, err = s.db.Exec(
 		"UPDATE storage_locations SET status = 'OCCUPE' WHERE id = $1",
 		location.ID,
