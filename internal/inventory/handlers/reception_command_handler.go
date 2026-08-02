@@ -65,6 +65,19 @@ func (h *ReceptionCommandHandler) Create(c *gin.Context) {
 	shared.Created(c, gin.H{"command": command})
 }
 
+// List retourne les sessions de réception, tous créateurs confondus — le
+// bandeau "session active" ne doit pas se limiter à ce que le poste courant a
+// créé localement, mais refléter l'état réel partagé côté serveur.
+func (h *ReceptionCommandHandler) List(c *gin.Context) {
+	status := strings.TrimSpace(c.Query("status"))
+	commands, err := h.repo.List(status)
+	if err != nil {
+		shared.InternalError(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"commands": commands})
+}
+
 func (h *ReceptionCommandHandler) GetByCode(c *gin.Context) {
 	code := strings.TrimSpace(c.Param("code"))
 	command, err := h.repo.GetByCode(code)

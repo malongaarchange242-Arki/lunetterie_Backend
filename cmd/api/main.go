@@ -241,6 +241,7 @@ func main() {
 		{
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			inventory.POST("/reception-commands", receptionCommandHandler.Create)
+			inventory.GET("/reception-commands", receptionCommandHandler.List)
 			inventory.GET("/reception-commands/:code", receptionCommandHandler.GetByCode)
 			inventory.POST("/reception-commands/:code/increment", receptionCommandHandler.Increment)
 			inventory.POST("/supplier-orders", supplierOrderHandler.Create)

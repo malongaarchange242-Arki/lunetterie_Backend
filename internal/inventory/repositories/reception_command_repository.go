@@ -27,6 +27,24 @@ func (r *ReceptionCommandRepository) Create(command *models.ReceptionCommand) er
 		Scan(&command.ID, &command.CreatedAt, &command.UpdatedAt)
 }
 
+func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionCommand, error) {
+	commands := []models.ReceptionCommand{}
+	query := `
+        SELECT id, code, target_count, registered_count, status, created_by, created_at, updated_at
+        FROM reception_commands
+    `
+	args := []interface{}{}
+	if status != "" {
+		query += " WHERE status = $1"
+		args = append(args, status)
+	}
+	query += " ORDER BY created_at DESC"
+	if err := r.db.Select(&commands, query, args...); err != nil {
+		return nil, fmt.Errorf("impossible de lister les commandes: %w", err)
+	}
+	return commands, nil
+}
+
 func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
