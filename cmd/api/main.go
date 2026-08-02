@@ -123,6 +123,8 @@ func main() {
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
 	receptionCommandRepo := repositories.NewReceptionCommandRepository(db)
 	receptionCommandHandler := inventoryHandlers.NewReceptionCommandHandler(receptionCommandRepo)
+	supplierOrderRepo := repositories.NewSupplierOrderRepository(db)
+	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
 	// Delivery handler
@@ -241,6 +243,9 @@ func main() {
 			inventory.POST("/reception-commands", receptionCommandHandler.Create)
 			inventory.GET("/reception-commands/:code", receptionCommandHandler.GetByCode)
 			inventory.POST("/reception-commands/:code/increment", receptionCommandHandler.Increment)
+			inventory.POST("/supplier-orders", supplierOrderHandler.Create)
+			inventory.GET("/supplier-orders", supplierOrderHandler.List)
+			inventory.DELETE("/supplier-orders/:id", supplierOrderHandler.Delete)
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
 			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
 			inventory.GET("/glasses", glassHandler.ListGlasses)
