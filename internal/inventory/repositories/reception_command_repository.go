@@ -19,11 +19,11 @@ func NewReceptionCommandRepository(db *sqlx.DB) *ReceptionCommandRepository {
 
 func (r *ReceptionCommandRepository) Create(command *models.ReceptionCommand) error {
 	query := `
-        INSERT INTO reception_commands (code, target_count, registered_count, status, created_by)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO reception_commands (code, target_count, registered_count, status, supplier_order_id, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, created_at, updated_at
     `
-	return r.db.QueryRowx(query, command.Code, command.TargetCount, command.RegisteredCount, command.Status, command.CreatedBy).
+	return r.db.QueryRowx(query, command.Code, command.TargetCount, command.RegisteredCount, command.Status, command.SupplierOrderID, command.CreatedBy).
 		Scan(&command.ID, &command.CreatedAt, &command.UpdatedAt)
 }
 
@@ -48,7 +48,7 @@ func (r *ReceptionCommandRepository) GetLatestCodeWithPrefix(prefix string) (str
 func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionCommand, error) {
 	commands := []models.ReceptionCommand{}
 	query := `
-        SELECT id, code, target_count, registered_count, status, created_by, created_at, updated_at
+        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, created_at, updated_at
         FROM reception_commands
     `
 	args := []interface{}{}
@@ -66,7 +66,7 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
-        SELECT id, code, target_count, registered_count, status, created_by, created_at, updated_at
+        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, created_at, updated_at
         FROM reception_commands
         WHERE code = $1
     `, strings.ToUpper(strings.TrimSpace(code)))
@@ -82,7 +82,7 @@ func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCo
 func (r *ReceptionCommandRepository) Increment(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
-        SELECT id, code, target_count, registered_count, status, created_by, created_at, updated_at
+        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, created_at, updated_at
         FROM reception_commands
         WHERE code = $1
     `, strings.ToUpper(strings.TrimSpace(code)))

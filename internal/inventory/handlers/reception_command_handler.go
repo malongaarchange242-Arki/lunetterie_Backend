@@ -63,6 +63,7 @@ func (h *ReceptionCommandHandler) Create(c *gin.Context) {
 		TargetCount:     req.TargetCount,
 		RegisteredCount: 0,
 		Status:          "active",
+		SupplierOrderID: req.SupplierOrderID,
 	}
 	if userID, exists := c.Get("user_id"); exists {
 		if id, err := strconv.ParseInt(fmt.Sprintf("%v", userID), 10, 64); err == nil {
