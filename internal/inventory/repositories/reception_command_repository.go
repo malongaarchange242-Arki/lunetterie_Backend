@@ -27,6 +27,24 @@ func (r *ReceptionCommandRepository) Create(command *models.ReceptionCommand) er
 		Scan(&command.ID, &command.CreatedAt, &command.UpdatedAt)
 }
 
+func (r *ReceptionCommandRepository) GetLatestCodeWithPrefix(prefix string) (string, error) {
+	var code string
+	err := r.db.Get(&code, `
+        SELECT code
+        FROM reception_commands
+        WHERE code LIKE $1
+        ORDER BY code DESC
+        LIMIT 1
+    `, prefix+"%")
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+	return code, nil
+}
+
 func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionCommand, error) {
 	commands := []models.ReceptionCommand{}
 	query := `

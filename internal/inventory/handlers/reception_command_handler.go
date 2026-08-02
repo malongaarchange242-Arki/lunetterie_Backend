@@ -14,16 +14,24 @@ import (
 	"github.com/lunetterie/backend/internal/shared"
 )
 
-// newSessionCode génère un code lisible et unique (horodatage + suffixe
-// aléatoire), indépendant de target_count : l'ancienne version dérivait le
-// code uniquement de target_count, donc deux sessions avec le même nombre de
-// montures produisaient le même code et violaient la contrainte UNIQUE.
-func newSessionCode() string {
-	suffix := make([]byte, 3)
-	_, _ = rand.Read(suffix)
-	return strings.ToUpper(fmt.Sprintf("SESSION-%s-%s",
-		strconv.FormatInt(time.Now().UnixNano(), 36),
-		fmt.Sprintf("%x", suffix)))
+// newSessionCode génère un code lisible et unique au format SYYMMDD-####.
+func newSessionCode(repo *repositories.ReceptionCommandRepository) (string, error) {
+	now := time.Now()
+	prefix := fmt.Sprintf("S%s-", now.Format("060102"))
+
+	latestCode, err := repo.GetLatestCodeWithPrefix(prefix)
+	if err != nil {
+		return "", err
+	}
+
+	sequence := 0
+	if latestCode != "" {
+		if n, parseErr := strconv.Atoi(strings.TrimPrefix(latestCode, prefix)); parseErr == nil {
+			sequence = n
+		}
+	}
+
+	return fmt.Sprintf("%s%04d", prefix, sequence+1), nil
 }
 
 type ReceptionCommandHandler struct {
@@ -45,8 +53,14 @@ func (h *ReceptionCommandHandler) Create(c *gin.Context) {
 		return
 	}
 
+	code, err := newSessionCode(h.repo)
+	if err != nil {
+		shared.InternalError(c, "Erreur génération du code de session")
+		return
+	}
+
 	command := &models.ReceptionCommand{
-		Code:            newSessionCode(),
+		Code:            code,
 		TargetCount:     req.TargetCount,
 		RegisteredCount: 0,
 		Status:          "active",
