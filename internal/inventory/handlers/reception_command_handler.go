@@ -1,16 +1,30 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/models"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
 	"github.com/lunetterie/backend/internal/shared"
 )
+
+// newSessionCode génère un code lisible et unique (horodatage + suffixe
+// aléatoire), indépendant de target_count : l'ancienne version dérivait le
+// code uniquement de target_count, donc deux sessions avec le même nombre de
+// montures produisaient le même code et violaient la contrainte UNIQUE.
+func newSessionCode() string {
+	suffix := make([]byte, 3)
+	_, _ = rand.Read(suffix)
+	return strings.ToUpper(fmt.Sprintf("SESSION-%s-%s",
+		strconv.FormatInt(time.Now().UnixNano(), 36),
+		fmt.Sprintf("%x", suffix)))
+}
 
 type ReceptionCommandHandler struct {
 	repo *repositories.ReceptionCommandRepository
@@ -31,9 +45,8 @@ func (h *ReceptionCommandHandler) Create(c *gin.Context) {
 		return
 	}
 
-	code := fmt.Sprintf("SESSION-%s-%s", strconv.FormatInt(int64(len(strings.ToUpper(fmt.Sprintf("%d", req.TargetCount)))+1000), 36), strconv.FormatInt(int64(1000+req.TargetCount), 36))
 	command := &models.ReceptionCommand{
-		Code:            strings.ToUpper(code),
+		Code:            newSessionCode(),
 		TargetCount:     req.TargetCount,
 		RegisteredCount: 0,
 		Status:          "active",
