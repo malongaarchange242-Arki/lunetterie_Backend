@@ -121,6 +121,8 @@ func main() {
 
 	// Initialiser les handlers
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
+	receptionCommandRepo := repositories.NewReceptionCommandRepository(db)
+	receptionCommandHandler := inventoryHandlers.NewReceptionCommandHandler(receptionCommandRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
 	// Delivery handler
@@ -236,6 +238,9 @@ func main() {
 		inventory.Use(authMiddleware.RequireAuth(authSvc))
 		{
 			inventory.POST("/reception", receptionHandler.HandleReception)
+			inventory.POST("/reception-commands", receptionCommandHandler.Create)
+			inventory.GET("/reception-commands/:code", receptionCommandHandler.GetByCode)
+			inventory.POST("/reception-commands/:code/increment", receptionCommandHandler.Increment)
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
 			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
 			inventory.GET("/glasses", glassHandler.ListGlasses)
