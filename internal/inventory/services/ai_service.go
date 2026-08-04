@@ -205,41 +205,50 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 	return result, nil
 }
 
+// ChatAction décrit une action UI que le frontend doit exécuter en plus d'afficher la
+// réponse texte (ex. ouvrir une page du tableau de bord) — voir navigate_to_page côté
+// app/ai/chat.py.
+type ChatAction struct {
+	Type string `json:"type"`
+	Page string `json:"page"`
+}
+
 // rawChatResponse reflète le schéma renvoyé par POST /assistant/chat (app/api/chat.py).
 type rawChatResponse struct {
-	Reply string `json:"reply"`
+	Reply  string      `json:"reply"`
+	Action *ChatAction `json:"action"`
 }
 
 // Chat relaie tel quel (message + historique + contexte déjà construits par direction.js)
 // au chatbot de direction du service IA, qui construit le prompt et appelle Claude
 // (app/ai/chat.py). Contrairement à Analyze/AnalyzeBranche, pas de repli silencieux
 // possible ici : une erreur remonte telle quelle à l'appelant.
-func (s *AIService) Chat(payload []byte) (string, error) {
+func (s *AIService) Chat(payload []byte) (string, *ChatAction, error) {
 	req, err := http.NewRequest(http.MethodPost, s.baseURL+"/assistant/chat", bytes.NewReader(payload))
 	if err != nil {
-		return "", fmt.Errorf("erreur création requête chat: %w", err)
+		return "", nil, fmt.Errorf("erreur création requête chat: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("service IA injoignable: %w", err)
+		return "", nil, fmt.Errorf("service IA injoignable: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("erreur lecture réponse chat: %w", err)
+		return "", nil, fmt.Errorf("erreur lecture réponse chat: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("erreur service IA (status %d): %s", resp.StatusCode, string(respBody))
+		return "", nil, fmt.Errorf("erreur service IA (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var raw rawChatResponse
 	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return "", fmt.Errorf("réponse chat invalide: %w", err)
+		return "", nil, fmt.Errorf("réponse chat invalide: %w", err)
 	}
-	return raw.Reply, nil
+	return raw.Reply, raw.Action, nil
 }
 
 // AnalyzeBranche envoie la photo de la branche au service IA pour OCR de la référence et de
