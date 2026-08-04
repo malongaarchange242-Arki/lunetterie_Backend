@@ -8,8 +8,15 @@ import (
 	"github.com/lunetterie/backend/internal/shared"
 )
 
-// roleDirection est l'id du rôle DIRECTION (voir migrations/001_init.up.sql, insert roles).
-const roleDirection = 7
+// Rôles autorisés à utiliser le chatbot (voir migrations/001_init.up.sql, insert roles).
+// DIRECTION (7) est le rôle prévu pour ce module, mais en pratique le compte utilisé au
+// quotidien pour la gestion est en ADMIN (2) : on autorise donc aussi ADMIN/SUPER_ADMIN
+// plutôt que de forcer un changement de rôle en base.
+var chatAllowedRoles = map[int64]bool{
+	1: true, // SUPER_ADMIN
+	2: true, // ADMIN
+	7: true, // DIRECTION
+}
 
 // ChatHandler expose le chatbot de direction (résumés/questions sur l'activité du magasin)
 type ChatHandler struct {
@@ -26,8 +33,8 @@ func NewChatHandler(aiService *services.AIService) *ChatHandler {
 // POST /api/v1/ai/chat
 func (h *ChatHandler) HandleChat(c *gin.Context) {
 	roleID, _ := c.Get("role_id")
-	if id, ok := roleID.(int64); !ok || id != roleDirection {
-		shared.Forbidden(c, "Réservé à la direction")
+	if id, ok := roleID.(int64); !ok || !chatAllowedRoles[id] {
+		shared.Forbidden(c, "Réservé à la direction/administration")
 		return
 	}
 
