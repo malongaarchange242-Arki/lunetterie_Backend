@@ -8,14 +8,16 @@ import (
 	"github.com/lunetterie/backend/internal/shared"
 )
 
-// Rôles autorisés à utiliser le chatbot (voir migrations/001_init.up.sql, insert roles).
-// DIRECTION (7) est le rôle prévu pour ce module, mais en pratique le compte utilisé au
-// quotidien pour la gestion est en ADMIN (2) : on autorise donc aussi ADMIN/SUPER_ADMIN
-// plutôt que de forcer un changement de rôle en base.
+// Rôles autorisés à utiliser le chatbot. IDs vérifiés directement dans la table `roles`
+// de la base de production (SELECT id, name FROM roles) : le fichier
+// migrations/001_init.up.sql est désynchronisé de la prod (DIRECTION y est insérée en
+// 7e position, mais vaut 8 en base ; SUPER_DIRECTEUR n'y figure même pas), ne pas s'y fier
+// pour ces IDs.
 var chatAllowedRoles = map[int64]bool{
-	1: true, // SUPER_ADMIN
-	2: true, // ADMIN
-	7: true, // DIRECTION
+	1:  true, // SUPER_ADMIN
+	2:  true, // ADMIN
+	8:  true, // DIRECTION
+	12: true, // SUPER_DIRECTEUR
 }
 
 // ChatHandler expose le chatbot de direction (résumés/questions sur l'activité du magasin)
