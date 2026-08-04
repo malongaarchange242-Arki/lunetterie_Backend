@@ -135,6 +135,7 @@ func main() {
 	movementHandler := inventoryHandlers.NewMovementHandler(movementRepo)
 	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
+	chatHandler := inventoryHandlers.NewChatHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
 
@@ -288,6 +289,13 @@ func main() {
 				presentoir.GET("/empty-slots", presentoirHandler.EmptySlotsToday)
 			}
 			inventory.GET("/movements", movementHandler.ListMovements)
+		}
+
+		// Assistant IA de direction (résumés/questions sur l'activité)
+		ai := v1.Group("/ai")
+		ai.Use(authMiddleware.RequireAuth(authSvc))
+		{
+			ai.POST("/chat", chatHandler.HandleChat)
 		}
 	}
 

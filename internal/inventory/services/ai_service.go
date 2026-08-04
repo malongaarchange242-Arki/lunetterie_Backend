@@ -205,6 +205,43 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 	return result, nil
 }
 
+// rawChatResponse reflète le schéma renvoyé par POST /assistant/chat (app/api/chat.py).
+type rawChatResponse struct {
+	Reply string `json:"reply"`
+}
+
+// Chat relaie tel quel (message + historique + contexte déjà construits par direction.js)
+// au chatbot de direction du service IA, qui construit le prompt et appelle Claude
+// (app/ai/chat.py). Contrairement à Analyze/AnalyzeBranche, pas de repli silencieux
+// possible ici : une erreur remonte telle quelle à l'appelant.
+func (s *AIService) Chat(payload []byte) (string, error) {
+	req, err := http.NewRequest(http.MethodPost, s.baseURL+"/assistant/chat", bytes.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("erreur création requête chat: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("service IA injoignable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("erreur lecture réponse chat: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("erreur service IA (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var raw rawChatResponse
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return "", fmt.Errorf("réponse chat invalide: %w", err)
+	}
+	return raw.Reply, nil
+}
+
 // AnalyzeBranche envoie la photo de la branche au service IA pour OCR de la référence et de
 // la marque (Claude vision) — utilisé à l'étape 2 de scan.html, séparément de la photo de face.
 func (s *AIService) AnalyzeBranche(imageBytes []byte, filename string, contentType string) (*dto.AnalysisResult, error) {
