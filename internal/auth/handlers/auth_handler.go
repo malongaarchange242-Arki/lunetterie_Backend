@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/auth/dto"
@@ -263,5 +264,41 @@ func (h *AuthHandler) LoginWithPassword(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{
 		"token": token,
 		"user":  user,
+	})
+}
+
+func (h *AuthHandler) GetMe(c *gin.Context) {
+	rawUserID, ok := c.Get("user_id")
+	if !ok {
+		shared.Unauthorized(c, "Non authentifié")
+		return
+	}
+
+	var userID int64
+	switch id := rawUserID.(type) {
+	case int64:
+		userID = id
+	case int:
+		userID = int64(id)
+	case string:
+		parsed, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			shared.Unauthorized(c, "Identifiant utilisateur invalide")
+			return
+		}
+		userID = parsed
+	default:
+		shared.Unauthorized(c, "Identifiant utilisateur invalide")
+		return
+	}
+
+	user, err := h.userRepo.FindByID(userID)
+	if err != nil {
+		shared.InternalError(c, "Utilisateur introuvable")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
+		"user": user,
 	})
 }

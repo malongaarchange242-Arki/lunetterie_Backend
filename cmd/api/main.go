@@ -142,23 +142,57 @@ func main() {
 	// Créer le router Gin
 	router := gin.Default()
 
-	// CORS pour tests local
+	// Middleware de sécurité HTTP + CORS
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if c.Request.Method == "OPTIONS" {
+		// En-têtes de sécurité
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-XSS-Protection", "1; mode=block")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		c.Header("Cross-Origin-Opener-Policy", "same-origin")
+		c.Header("Cross-Origin-Embedder-Policy", "require-corp")
+		c.Header("Cross-Origin-Resource-Policy", "same-origin")
+		c.Header("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"img-src 'self' data: https:; "+
+				"font-src 'self' data: https://fonts.gstatic.com; "+
+				"connect-src 'self' https://lunetterie-frontend.onrender.com; "+
+				"frame-ancestors 'none'; "+
+				"base-uri 'self'; "+
+				"form-action 'self'")
+
+		origin := c.GetHeader("Origin")
+		allowedOrigins := []string{
+			"https://lunetterie-frontend.onrender.com",
+			"https://www.lunetterie-frontend.onrender.com",
+			"http://localhost:3000",
+			"http://localhost:8080",
+		}
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Vary", "Origin")
+				break
+			}
+		}
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token")
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type")
+		c.Header("Access-Control-Allow-Credentials", "true")
+
+		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 		c.Next()
 	})
 
-	// Fichiers statiques du frontend admin
+	// Fichiers statiques du frontend
 	frontendDir := findFrontendDir()
-	router.StaticFile("/admin.html", filepath.Join(frontendDir, "admin.html"))
-	router.StaticFile("/admin.css", filepath.Join(frontendDir, "admin.css"))
-	router.StaticFile("/admin.js", filepath.Join(frontendDir, "admin.js"))
 	router.StaticFile("/logo.jpeg", filepath.Join(frontendDir, "logo.jpeg"))
 	router.StaticFile("/login.css", filepath.Join(frontendDir, "login.css"))
 	router.StaticFile("/login.html", filepath.Join(frontendDir, "index.html"))
@@ -186,6 +220,30 @@ func main() {
 			return
 		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	})
+
+	// Page admin protégée
+	adminGroup := router.Group("/")
+	adminGroup.Use(authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12))
+	{
+		adminGroup.GET("/admin.html", func(c *gin.Context) {
+			c.File(filepath.Join(frontendDir, "admin.html"))
+		})
+		adminGroup.GET("/admin.css", func(c *gin.Context) {
+			c.File(filepath.Join(frontendDir, "admin.css"))
+		})
+		adminGroup.GET("/admin.js", func(c *gin.Context) {
+			c.File(filepath.Join(frontendDir, "admin.js"))
+		})
+	}
+
+	// Rediriger /admin vers la page admin.
+	router.GET("/admin", func(c *gin.Context) {
+		if c.Query("debug") != "" {
+			c.Redirect(http.StatusTemporaryRedirect, "/index.html")
+			return
+		}
+		c.Redirect(http.StatusTemporaryRedirect, "/admin.html")
 	})
 
 	// Fichier de test HTML (page d'inscription biométrique)
@@ -228,18 +286,21 @@ func main() {
 			// Routes classiques (empreinte digitale hashée)
 			auth.POST("/register", authHandler.RegisterUser)
 			// Création de compte avec role_id/station_id choisis librement par l'appelant :
-			// réservée aux rôles admin (mêmes IDs que chatAllowedRoles dans chat_handler.go,
-			// vérifiés en base de production — ne pas se fier à migrations/001_init.up.sql).
+			// réservée aux rôles admin.
 			auth.POST("/register-fingerprint", authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.RegisterFingerprintUser)
 			auth.POST("/login-fingerprint", authHandler.LoginWithFingerprint)
 			auth.POST("/login", authHandler.LoginWithPassword)
 			auth.POST("/set-password", authHandler.SetInitialPassword)
-			auth.GET("/users", authHandler.ListUsers)
-			auth.POST("/users", authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.CreateUser)
-			auth.GET("/stations", authHandler.ListStations)
+
+			auth.Use(authMiddleware.RequireAuth(authSvc))
+			{
+				auth.GET("/me", authHandler.GetMe)
+				auth.GET("/users", authHandler.ListUsers)
+				auth.GET("/stations", authHandler.ListStations)
+				auth.POST("/users", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.CreateUser)
+			}
 		}
 
-		// Routes inventaire
 		inventory := v1.Group("/inventory")
 		inventory.Use(authMiddleware.RequireAuth(authSvc))
 		{
