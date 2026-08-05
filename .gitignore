@@ -1,0 +1,14 @@
+# Environnement / secrets
+.env
+.env.*
+!.env.example
+
+# Build
+main.exe
+tmp/
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

@@ -227,12 +227,15 @@ func main() {
 
 			// Routes classiques (empreinte digitale hashée)
 			auth.POST("/register", authHandler.RegisterUser)
-			auth.POST("/register-fingerprint", authHandler.RegisterFingerprintUser)
+			// Création de compte avec role_id/station_id choisis librement par l'appelant :
+			// réservée aux rôles admin (mêmes IDs que chatAllowedRoles dans chat_handler.go,
+			// vérifiés en base de production — ne pas se fier à migrations/001_init.up.sql).
+			auth.POST("/register-fingerprint", authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.RegisterFingerprintUser)
 			auth.POST("/login-fingerprint", authHandler.LoginWithFingerprint)
 			auth.POST("/login", authHandler.LoginWithPassword)
 			auth.POST("/set-password", authHandler.SetInitialPassword)
 			auth.GET("/users", authHandler.ListUsers)
-			auth.POST("/users", authHandler.CreateUser)
+			auth.POST("/users", authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.CreateUser)
 			auth.GET("/stations", authHandler.ListStations)
 		}
 
