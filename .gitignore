@@ -1,0 +1,33 @@
+# Environnement / secrets
+.env
+.env.*
+!.env.example
+key Api.json
+lunetterie key API.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Modèles / poids entraînés (volumineux)
+*.pth
+*.pt
+
+# Node / build
+node_modules/
+dist/
+build/
+
+# Go
+backend/tmp/
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
