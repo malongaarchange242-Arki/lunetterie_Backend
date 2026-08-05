@@ -14,14 +14,16 @@ import (
 
 // ReceptionWorkflow orchestrate le workflow complet de réception
 type ReceptionWorkflow struct {
-	allocationService *services.AllocationService
-	movementService   *services.MovementService
-	barcodeService    *services.BarcodeService
-	analysisService   *services.AnalysisService
-	storageService    *services.StorageService
-	glassRepo         *repositories.GlassRepository
-	locationRepo      *repositories.LocationRepository
-	analysisRepo      *repositories.AnalysisRepository
+	allocationService   *services.AllocationService
+	movementService     *services.MovementService
+	barcodeService      *services.BarcodeService
+	analysisService     *services.AnalysisService
+	storageService      *services.StorageService
+	similarityService   *services.SimilarityService
+	glassRepo           *repositories.GlassRepository
+	locationRepo        *repositories.LocationRepository
+	analysisRepo        *repositories.AnalysisRepository
+	shapeCorrectionRepo *repositories.ShapeCorrectionRepository
 }
 
 // NewReceptionWorkflow crée une nouvelle instance
@@ -31,19 +33,23 @@ func NewReceptionWorkflow(
 	barcodeSvc *services.BarcodeService,
 	analysisSvc *services.AnalysisService,
 	storageSvc *services.StorageService,
+	similaritySvc *services.SimilarityService,
 	glassRepo *repositories.GlassRepository,
 	locationRepo *repositories.LocationRepository,
 	analysisRepo *repositories.AnalysisRepository,
+	shapeCorrectionRepo *repositories.ShapeCorrectionRepository,
 ) *ReceptionWorkflow {
 	return &ReceptionWorkflow{
-		allocationService: allocationSvc,
-		movementService:   movementSvc,
-		barcodeService:    barcodeSvc,
-		analysisService:   analysisSvc,
-		storageService:    storageSvc,
-		glassRepo:         glassRepo,
-		locationRepo:      locationRepo,
-		analysisRepo:      analysisRepo,
+		allocationService:   allocationSvc,
+		movementService:     movementSvc,
+		barcodeService:      barcodeSvc,
+		analysisService:     analysisSvc,
+		storageService:      storageSvc,
+		similarityService:   similaritySvc,
+		glassRepo:           glassRepo,
+		locationRepo:        locationRepo,
+		analysisRepo:        analysisRepo,
+		shapeCorrectionRepo: shapeCorrectionRepo,
 	}
 }
 
@@ -69,7 +75,7 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 	// Étape: Générer un code-barres unique
 	log.Println("🏷️  Génération code-barres...")
-	barcode, err := w.barcodeService.GenerateBarcode("LB")
+	barcode, err := w.barcodeService.GenerateBarcode()
 	if err != nil {
 		return nil, fmt.Errorf("erreur code-barres: %w", err)
 	}
@@ -93,9 +99,35 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 	// Étape: Trouver un emplacement libre
 	log.Println("📍 Recherche emplacement libre...")
-	location, err := w.allocationService.FindFreeLocation(req.StationID, models.ZoneStock)
-	if err != nil {
-		return nil, fmt.Errorf("erreur allocation: %w", err)
+	var location *models.StorageLocation
+	var allocErr error
+
+	if req.Gender != nil || req.Shape != nil || req.Price != nil {
+		candidates, err := w.glassRepo.FindByStationAndStatuses(req.StationID, []string{string(models.StatusEnStockGeneral)})
+		if err == nil && len(candidates) > 0 {
+			reference := &models.GlassListItem{
+				Gender: req.Gender,
+				Shape:  req.Shape,
+				Price:  req.Price,
+			}
+			best, score, err := w.similarityService.FindBestMatch(reference, candidates)
+			if err == nil && best != nil && score > 0 {
+				log.Printf("🔎 Meilleure monture similaire trouvée: %s (score %.2f)", best.Barcode, score)
+				if best.LocationCode != nil && *best.LocationCode != "" {
+					location, allocErr = w.allocationService.FindFreeLocationNearCode(req.StationID, models.ZoneStock, *best.LocationCode)
+					if allocErr == nil {
+						log.Printf("✅ Emplacement proche trouvé autour de %s", *best.LocationCode)
+					}
+				}
+			}
+		}
+	}
+
+	if location == nil {
+		location, allocErr = w.allocationService.FindFreeLocation(req.StationID, models.ZoneStock)
+		if allocErr != nil {
+			return nil, fmt.Errorf("erreur allocation: %w", allocErr)
+		}
 	}
 	log.Printf("✅ Emplacement trouvé: %s", location.Code)
 
@@ -119,6 +151,21 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 		return nil, fmt.Errorf("erreur création glass: %w", err)
 	}
 	log.Printf("✅ Glass créé: ID=%d", glass.ID)
+
+	// Étape: Journaliser une éventuelle correction manuelle de la forme détectée par l'IA
+	if req.DetectedShape != nil && req.Shape != nil && *req.DetectedShape != "" && *req.Shape != "" && *req.DetectedShape != *req.Shape {
+		correction := &models.ShapeCorrection{
+			GlassID:        glass.ID,
+			DetectedShape:  *req.DetectedShape,
+			CorrectedShape: *req.Shape,
+			UserID:         &userID,
+		}
+		if err := w.shapeCorrectionRepo.Create(correction); err != nil {
+			log.Printf("⚠️  Erreur journalisation correction de forme: %v", err)
+		} else {
+			log.Printf("✏️  Correction de forme journalisée: %s → %s", *req.DetectedShape, *req.Shape)
+		}
+	}
 
 	// Étape: Créer le mouvement
 	log.Println("📝 Création mouvement...")
@@ -210,8 +257,8 @@ func buildAnalysisResult(req dto.ReceptionRequest) *dto.AnalysisResult {
 	if req.Size != nil {
 		result.Size = *req.Size
 	}
-	if req.Brand != nil {
-		result.Brand = *req.Brand
+	if brand := req.EffectiveBrand(); brand != nil {
+		result.Brand = *brand
 	}
 	if req.Reference != nil {
 		result.Reference = *req.Reference

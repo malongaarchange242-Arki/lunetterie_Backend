@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/auth/dto"
@@ -14,6 +15,7 @@ import (
 
 type AuthHandler struct {
 	userRepo        *repositories.UserRepository
+	stationRepo     *repositories.StationRepository
 	authService     *services.AuthService
 	webauthnService *services.WebAuthnService
 }
@@ -25,8 +27,8 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-func NewAuthHandler(userRepo *repositories.UserRepository, authService *services.AuthService, webauthnService *services.WebAuthnService) *AuthHandler {
-	return &AuthHandler{userRepo: userRepo, authService: authService, webauthnService: webauthnService}
+func NewAuthHandler(userRepo *repositories.UserRepository, stationRepo *repositories.StationRepository, authService *services.AuthService, webauthnService *services.WebAuthnService) *AuthHandler {
+	return &AuthHandler{userRepo: userRepo, stationRepo: stationRepo, authService: authService, webauthnService: webauthnService}
 }
 
 func (h *AuthHandler) RegisterUser(c *gin.Context) {
@@ -137,6 +139,18 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 	})
 }
 
+func (h *AuthHandler) ListStations(c *gin.Context) {
+	stations, err := h.stationRepo.FindAll()
+	if err != nil {
+		shared.InternalError(c, "Impossible de récupérer les stations")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
+		"stations": stations,
+	})
+}
+
 func (h *AuthHandler) CreateUser(c *gin.Context) {
 	var req dto.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -157,12 +171,134 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		IsActive:  true,
 	}
 
+	if req.Password != "" {
+		hash, err := services.HashPassword(req.Password)
+		if err != nil {
+			shared.InternalError(c, "Impossible de sécuriser le mot de passe")
+			return
+		}
+		user.PasswordHash = &hash
+	}
+
 	if err := h.userRepo.Create(user); err != nil {
 		shared.InternalError(c, "Impossible de créer l'utilisateur")
 		return
 	}
 
 	shared.Success(c, http.StatusCreated, gin.H{
+		"user": user,
+	})
+}
+
+func (h *AuthHandler) SetInitialPassword(c *gin.Context) {
+	var req dto.SetInitialPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Données invalides: "+err.Error())
+		return
+	}
+
+	user, err := h.userRepo.FindByEmail(req.Email)
+	if err != nil {
+		shared.Unauthorized(c, "Compte introuvable")
+		return
+	}
+
+	if user.PasswordHash != nil {
+		shared.BadRequest(c, "Un mot de passe est déjà défini pour ce compte")
+		return
+	}
+
+	hash, err := services.HashPassword(req.Password)
+	if err != nil {
+		shared.InternalError(c, "Impossible de sécuriser le mot de passe")
+		return
+	}
+
+	if err := h.userRepo.SetPassword(user.ID, hash); err != nil {
+		shared.InternalError(c, "Impossible d'enregistrer le mot de passe")
+		return
+	}
+	user.HasPassword = true
+
+	token, err := h.authService.GenerateToken(user)
+	if err != nil {
+		shared.InternalError(c, "Erreur génération token")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
+		"token": token,
+		"user":  user,
+	})
+}
+
+func (h *AuthHandler) LoginWithPassword(c *gin.Context) {
+	var req dto.PasswordLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Données invalides: "+err.Error())
+		return
+	}
+
+	user, err := h.userRepo.FindByEmail(req.Email)
+	if err != nil {
+		shared.Unauthorized(c, "Identifiants incorrects")
+		return
+	}
+
+	if user.PasswordHash == nil || !services.CheckPassword(*user.PasswordHash, req.Password) {
+		shared.Unauthorized(c, "Identifiants incorrects")
+		return
+	}
+
+	if !user.IsActive {
+		shared.Unauthorized(c, "Compte désactivé")
+		return
+	}
+
+	token, err := h.authService.GenerateToken(user)
+	if err != nil {
+		shared.InternalError(c, "Erreur génération token")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
+		"token": token,
+		"user":  user,
+	})
+}
+
+func (h *AuthHandler) GetMe(c *gin.Context) {
+	rawUserID, ok := c.Get("user_id")
+	if !ok {
+		shared.Unauthorized(c, "Non authentifié")
+		return
+	}
+
+	var userID int64
+	switch id := rawUserID.(type) {
+	case int64:
+		userID = id
+	case int:
+		userID = int64(id)
+	case string:
+		parsed, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			shared.Unauthorized(c, "Identifiant utilisateur invalide")
+			return
+		}
+		userID = parsed
+	default:
+		shared.Unauthorized(c, "Identifiant utilisateur invalide")
+		return
+	}
+
+	user, err := h.userRepo.FindByID(userID)
+	if err != nil {
+		shared.InternalError(c, "Utilisateur introuvable")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
 		"user": user,
 	})
 }

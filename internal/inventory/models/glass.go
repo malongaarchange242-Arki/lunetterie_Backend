@@ -24,6 +24,48 @@ type Glass struct {
 	UpdatedAt        time.Time   `db:"updated_at" json:"updated_at"`
 }
 
+// GlassListItem représente une monture pour affichage en liste (jointure glasses + glass_analysis + storage_locations)
+type GlassListItem struct {
+	ID              int64    `db:"id" json:"id"`
+	Barcode         string   `db:"barcode" json:"barcode"`
+	StationID       int64    `db:"station_id" json:"station_id"`
+	StationName     *string  `db:"station_name" json:"station_name,omitempty"`
+	Status          string   `db:"status" json:"status"`
+	Price           *float64 `db:"price" json:"price,omitempty"`
+	Reference       *string  `db:"reference" json:"reference,omitempty"`
+	Brand           *string  `db:"brand" json:"brand,omitempty"`
+	Gender          *string  `db:"gender" json:"gender,omitempty"`
+	Shape           *string  `db:"shape" json:"shape,omitempty"`
+	Color           *string  `db:"color" json:"color,omitempty"`
+	Size            *string  `db:"size" json:"size,omitempty"`
+	Material        *string  `db:"material" json:"material,omitempty"`
+	LocationCode    *string  `db:"location_code" json:"location_code,omitempty"`
+	PhotoMontureURL *string  `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
+	PhotoBrancheURL *string  `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
+}
+
+// SimilarGlass représente une monture candidate au classement de similarité, avec le score
+// composite (genre/forme/prix) et son détail par critère pour transparence côté UI.
+type SimilarGlass struct {
+	GlassListItem
+	Score      float64 `json:"score"`
+	ScoreGenre float64 `json:"score_genre"`
+	ScoreForme float64 `json:"score_forme"`
+	ScorePrix  float64 `json:"score_prix"`
+}
+
+// StockSummaryItem représente le stock actif (hors vendu/perdu/cassé/retourné) d'une référence,
+// réparti entre Stock Général, Stock Local (station régionale) et Présentoir.
+type StockSummaryItem struct {
+	Reference     *string `db:"reference" json:"reference,omitempty"`
+	Brand         *string `db:"brand" json:"brand,omitempty"`
+	QtyGeneral    int     `db:"qty_general" json:"qty_general"`
+	QtyLocal      int     `db:"qty_local" json:"qty_local"`
+	QtyPresentoir int     `db:"qty_presentoir" json:"qty_presentoir"`
+	QtyTotal      int     `db:"qty_total" json:"qty_total"`
+	IsCritical    bool    `db:"is_critical" json:"is_critical"`
+}
+
 // Movement représente un mouvement de monture
 type Movement struct {
 	ID             int64          `db:"id" json:"id"`
@@ -117,14 +159,13 @@ type Supplier struct {
 	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
 }
 
-// Delivery représente un arrivage
-type Delivery struct {
-	ID         int64     `db:"id" json:"id"`
-	SupplierID int64     `db:"supplier_id" json:"supplier_id"`
-	Reference  *string   `db:"reference" json:"reference,omitempty"`
-	ReceivedBy *int64    `db:"received_by" json:"received_by,omitempty"`
-	StationID  int64     `db:"station_id" json:"station_id"`
-	Notes      *string   `db:"notes" json:"notes,omitempty"`
-	ReceivedAt time.Time `db:"received_at" json:"received_at"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+// NOTE: Delivery model moved to models/delivery.go
+
+// EmptySlot représente un emplacement présentoir devenu libre aujourd'hui, avec la monture qui
+// l'occupait (vendue ou réservée) — pour savoir quoi remettre en place et où.
+type EmptySlot struct {
+	Code      string  `db:"code" json:"code"`
+	Barcode   string  `db:"barcode" json:"barcode"`
+	Reference *string `db:"reference" json:"reference,omitempty"`
+	Brand     *string `db:"brand" json:"brand,omitempty"`
 }

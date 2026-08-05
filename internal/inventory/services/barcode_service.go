@@ -2,27 +2,30 @@ package services
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/code128"
-	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 // BarcodeService gère la génération de code-barres
-type BarcodeService struct{}
-
-// NewBarcodeService crée une nouvelle instance
-func NewBarcodeService() *BarcodeService {
-	return &BarcodeService{}
+type BarcodeService struct {
+	db *sqlx.DB
 }
 
-// GenerateBarcode génère un code-barres unique Code128
-func (s *BarcodeService) GenerateBarcode(prefix string) (string, error) {
-	// Format: LB-YYYYMMDD-UUID8 (Lunetterie + date + uuid court)
-	date := time.Now().Format("20060102")
-	shortUUID := uuid.New().String()[:8]
-	code := fmt.Sprintf("%s-%s-%s", prefix, date, shortUUID)
+// NewBarcodeService crée une nouvelle instance
+func NewBarcodeService(db *sqlx.DB) *BarcodeService {
+	return &BarcodeService{db: db}
+}
+
+// GenerateBarcode génère un code-barres unique Code128, format LUN-CNG-00000001
+// (numéro séquentiel atomique via la séquence Postgres "barcode_seq").
+func (s *BarcodeService) GenerateBarcode() (string, error) {
+	var seq int64
+	if err := s.db.Get(&seq, `SELECT nextval('barcode_seq')`); err != nil {
+		return "", fmt.Errorf("erreur génération numéro de code-barres: %w", err)
+	}
+	code := fmt.Sprintf("LUN-CNG-%08d", seq)
 
 	// Vérifier que le code peut être encodé en Code128
 	_, err := code128.Encode(code)

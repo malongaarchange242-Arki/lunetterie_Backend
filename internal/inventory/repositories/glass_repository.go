@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/lunetterie/backend/internal/inventory/models"
 )
 
@@ -67,6 +68,126 @@ func (r *GlassRepository) GetByBarcode(barcode string) (*models.Glass, error) {
 	return &glass, nil
 }
 
+// FindByStationAndStatuses liste les montures d'une station filtrées par statut,
+// avec leurs attributs (référence, forme, couleur...) issus de l'analyse IA/vérification.
+func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []string) ([]models.GlassListItem, error) {
+	items := []models.GlassListItem{}
+	query := `
+		SELECT g.id, g.barcode, g.station_id, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		WHERE g.station_id = $1 AND g.status = ANY($2)
+		ORDER BY g.created_at DESC`
+	if err := r.db.Select(&items, query, stationID, pq.Array(statuses)); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures: %w", err)
+	}
+	return items, nil
+}
+
+// stockCriticalThreshold : une référence est jugée en stock critique quand sa quantité
+// totale active (Stock Général + Stock Local + Présentoir) descend à ce seuil ou en dessous.
+const stockCriticalThreshold = 2
+
+// GetStockSummaryByReference agrège le stock actif par référence, réparti entre
+// Stock Général (station "Stock Principal"), Stock Local (station "Station Pointe-Noire")
+// et Présentoir. Exclut les montures vendues, perdues, cassées ou retournées.
+func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryItem, error) {
+	items := []models.StockSummaryItem{}
+	query := `
+		SELECT
+			ga.reference, ga.brand,
+			COUNT(*) FILTER (WHERE s.name = 'Stock Principal') AS qty_general,
+			COUNT(*) FILTER (WHERE s.name = 'Station Pointe-Noire') AS qty_local,
+			COUNT(*) FILTER (WHERE s.name = 'Présentoir') AS qty_presentoir,
+			COUNT(*) AS qty_total,
+			(COUNT(*) <= $1) AS is_critical
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.status NOT IN ('VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE')
+		GROUP BY ga.reference, ga.brand
+		ORDER BY ga.reference NULLS LAST`
+	if err := r.db.Select(&items, query, stockCriticalThreshold); err != nil {
+		return nil, fmt.Errorf("impossible de calculer le résumé du stock: %w", err)
+	}
+	return items, nil
+}
+
+// FindByStatuses liste les montures filtrées par statut, toutes stations confondues.
+func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListItem, error) {
+	items := []models.GlassListItem{}
+	query := `
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.status = ANY($1)
+		ORDER BY g.created_at DESC`
+	if err := r.db.Select(&items, query, pq.Array(statuses)); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures: %w", err)
+	}
+	return items, nil
+}
+
+// FindDetailByBarcode recherche une monture par code-barres (toutes stations confondues),
+// avec ses attributs issus de l'analyse IA/vérification et son emplacement actuel.
+func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassListItem, error) {
+	var item models.GlassListItem
+	query := `
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.barcode = $1`
+	if err := r.db.Get(&item, query, barcode); err != nil {
+		return nil, fmt.Errorf("monture introuvable: %w", err)
+	}
+	return &item, nil
+}
+
+// availableStatuses liste les statuts d'une monture pouvant être proposée comme alternative à
+// un client (en stock ou exposée) — à l'exclusion des montures réservées, en transit, en
+// laboratoire ou déjà sorties du stock actif (vendue, perdue, cassée, retournée).
+var availableStatuses = []string{
+	string(models.StatusEnStockGeneral),
+	string(models.StatusEnStockSousStation),
+	string(models.StatusEnPresentoir),
+}
+
+// FindAvailableExcluding liste les montures disponibles (hors réservées/vendues/etc.), à
+// l'exclusion d'une monture donnée — utilisé pour chercher des alternatives similaires à une
+// monture de référence.
+func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.GlassListItem, error) {
+	items := []models.GlassListItem{}
+	query := `
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+			g.photo_monture_url, g.photo_branche_url,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.status = ANY($1) AND g.id != $2
+		ORDER BY g.created_at DESC`
+	if err := r.db.Select(&items, query, pq.Array(availableStatuses), excludeID); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures disponibles: %w", err)
+	}
+	return items, nil
+}
+
 // UpdateStatus met à jour le statut d'une monture
 func (r *GlassRepository) UpdateStatus(glassID int64, status models.GlassStatus) error {
 	query := `
@@ -114,5 +235,15 @@ func (r *GlassRepository) UpdateAnalysis(glassID int64, analysisID int64) error 
 		SET analysis_id = $1, updated_at = NOW() 
 		WHERE id = $2`
 	_, err := r.db.Exec(query, analysisID, glassID)
+	return err
+}
+
+// UpdateReservedState met à jour l'état réservé d'une monture
+func (r *GlassRepository) UpdateReservedState(glassID int64, reserved bool) error {
+	query := `
+        UPDATE glasses 
+        SET is_reserved = $1, updated_at = NOW() 
+        WHERE id = $2`
+	_, err := r.db.Exec(query, reserved, glassID)
 	return err
 }

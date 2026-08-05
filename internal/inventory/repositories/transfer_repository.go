@@ -121,11 +121,24 @@ func (r *TransferRepository) GetItemByGlassID(transferID, glassID int64) (*model
 	return &item, nil
 }
 
-// MarkItemsInTransit passe toutes les montures PENDING d'un transfert en IN_TRANSIT
-func (r *TransferRepository) MarkItemsInTransit(transferID int64) error {
+// GetActiveItemByGlassID récupère la ligne de transfert en cours (IN_TRANSIT) d'une monture,
+// quel que soit le transfert. Renvoie une erreur si la monture n'a pas de transfert actif.
+func (r *TransferRepository) GetActiveItemByGlassID(glassID int64) (*models.TransferItem, error) {
+	var item models.TransferItem
+	query := `SELECT * FROM transfer_items WHERE glass_id = $1 AND status = $2`
+	if err := r.db.Get(&item, query, glassID, models.TransferItemStatusInTransit); err != nil {
+		return nil, fmt.Errorf("aucun transfert actif pour cette monture: %w", err)
+	}
+	return &item, nil
+}
+
+// MarkItemInTransit passe une seule monture en IN_TRANSIT (utilisé pendant Dispatch, juste après
+// avoir basculé le statut de la monture elle-même, pour que les deux restent synchronisés même
+// si un item suivant du même transfert échoue en cours de route).
+func (r *TransferRepository) MarkItemInTransit(itemID int64) error {
 	_, err := r.db.Exec(
-		`UPDATE transfer_items SET status = $1 WHERE transfer_id = $2 AND status = $3`,
-		models.TransferItemStatusInTransit, transferID, models.TransferItemStatusPending,
+		`UPDATE transfer_items SET status = $1 WHERE id = $2`,
+		models.TransferItemStatusInTransit, itemID,
 	)
 	return err
 }

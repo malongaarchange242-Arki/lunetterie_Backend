@@ -22,6 +22,8 @@ build/
 
 # Go
 backend/tmp/
+main.exe
+tmp/
 
 # IDE / OS
 .vscode/

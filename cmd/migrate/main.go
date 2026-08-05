@@ -36,6 +36,7 @@ func main() {
 		"migrations/004_users_gender.up.sql",
 		"migrations/005_glasses_price.up.sql",
 		"migrations/006_glasses_photos.up.sql",
+		"migrations/014_seed_directeur.up.sql",
 	}
 
 	for _, path := range migrations {

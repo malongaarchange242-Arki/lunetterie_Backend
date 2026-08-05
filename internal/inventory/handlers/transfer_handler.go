@@ -22,20 +22,6 @@ func NewTransferHandler(service *services.TransferService, glassRepo *repositori
 	return &TransferHandler{service: service, glassRepo: glassRepo}
 }
 
-func currentUserID(c *gin.Context) (int64, bool) {
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		shared.Unauthorized(c, "Utilisateur non authentifié")
-		return 0, false
-	}
-	userID, err := strconv.ParseInt(userIDStr.(string), 10, 64)
-	if err != nil {
-		shared.BadRequest(c, "ID utilisateur invalide")
-		return 0, false
-	}
-	return userID, true
-}
-
 func toTransferResponse(t *models.Transfer, items []models.TransferItem, glassRepo *repositories.GlassRepository) dto.TransferResponse {
 	resp := dto.TransferResponse{
 		ID:            t.ID,
@@ -218,7 +204,8 @@ func (h *TransferHandler) ListTransfers(c *gin.Context) {
 
 	resp := make([]dto.TransferResponse, 0, len(transfers))
 	for _, t := range transfers {
-		resp = append(resp, toTransferResponse(&t, nil, h.glassRepo))
+		items, _ := h.service.ListItems(t.ID)
+		resp = append(resp, toTransferResponse(&t, items, h.glassRepo))
 	}
 	shared.Success(c, 200, resp)
 }

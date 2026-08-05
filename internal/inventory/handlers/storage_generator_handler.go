@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/dto"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -70,6 +72,35 @@ func (h *StorageGeneratorHandler) FindFreeLocation(c *gin.Context) {
 	locationID, path, code, err := h.service.FindFreeLocation(req.StationID, models.ZoneType(req.Zone))
 	if err != nil {
 		shared.InternalError(c, "Erreur lors de la recherche d'un emplacement libre: "+err.Error())
+		return
+	}
+
+	shared.Success(c, 200, gin.H{
+		"location_id": locationID,
+		"path":        path,
+		"code":        code,
+	})
+}
+
+// PreviewFreeLocation retourne le prochain emplacement libre SANS le réserver, pour un aperçu
+// avant l'enregistrement réel (l'emplacement réellement attribué peut différer si un autre
+// enregistrement concurrent le prend entre-temps).
+// GET /api/v1/inventory/storage/next-free?station_id=1&zone=STOCK
+func (h *StorageGeneratorHandler) PreviewFreeLocation(c *gin.Context) {
+	stationID, err := strconv.ParseInt(c.Query("station_id"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "station_id requis")
+		return
+	}
+
+	zone := c.Query("zone")
+	if zone == "" {
+		zone = string(models.ZoneStock)
+	}
+
+	locationID, path, code, err := h.service.PeekFreeLocation(stationID, models.ZoneType(zone))
+	if err != nil {
+		shared.NotFound(c, "Aucun emplacement libre trouvé")
 		return
 	}
 

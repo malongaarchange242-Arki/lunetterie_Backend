@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	authRepositories "github.com/lunetterie/backend/internal/auth/repositories"
 	"github.com/lunetterie/backend/internal/inventory/models"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
 )
@@ -14,27 +15,29 @@ type TransferService struct {
 	glassRepo    *repositories.GlassRepository
 	movementRepo *repositories.MovementRepository
 	allocation   *AllocationService
+	stationRepo  *authRepositories.StationRepository
 }
 
-// NewTransferService crée une nouvelle instance
+var transferableStatuses = map[models.GlassStatus]bool{
+	models.StatusEnStockGeneral:     true,
+	models.StatusEnStockSousStation: true,
+	models.StatusEnPresentoir:       true,
+}
+
 func NewTransferService(
 	transferRepo *repositories.TransferRepository,
 	glassRepo *repositories.GlassRepository,
 	movementRepo *repositories.MovementRepository,
 	allocation *AllocationService,
+	stationRepo *authRepositories.StationRepository,
 ) *TransferService {
 	return &TransferService{
 		transferRepo: transferRepo,
 		glassRepo:    glassRepo,
 		movementRepo: movementRepo,
 		allocation:   allocation,
+		stationRepo:  stationRepo,
 	}
-}
-
-// transferableStatuses liste les statuts à partir desquels une monture peut être transférée
-var transferableStatuses = map[models.GlassStatus]bool{
-	models.StatusEnStockGeneral:     true,
-	models.StatusEnStockSousStation: true,
 }
 
 // CreateTransfer crée un nouveau transfert en préparation
@@ -127,6 +130,13 @@ func (s *TransferService) Dispatch(transferID int64, userID int64) (*models.Tran
 		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnTransit); err != nil {
 			return nil, fmt.Errorf("impossible de mettre à jour le statut de la monture #%d: %w", glass.ID, err)
 		}
+		// Basculé tout de suite après le statut de la monture (et non en un seul lot après la
+		// boucle) : si un item suivant du même transfert échoue, celui-ci reste cohérent
+		// (monture EN_TRANSIT + ligne de transfert IN_TRANSIT ensemble), au lieu de laisser la
+		// monture EN_TRANSIT avec une ligne de transfert restée PENDING pour toujours.
+		if err := s.transferRepo.MarkItemInTransit(item.ID); err != nil {
+			return nil, fmt.Errorf("impossible de marquer la monture #%d en transit: %w", glass.ID, err)
+		}
 
 		movement := &models.Movement{
 			GlassID:        glass.ID,
@@ -141,9 +151,6 @@ func (s *TransferService) Dispatch(transferID int64, userID int64) (*models.Tran
 		}
 	}
 
-	if err := s.transferRepo.MarkItemsInTransit(transferID); err != nil {
-		return nil, err
-	}
 	if err := s.transferRepo.UpdateStatus(transferID, models.TransferStatusInTransit); err != nil {
 		return nil, err
 	}
@@ -174,7 +181,7 @@ func (s *TransferService) ReceiveItem(transferID int64, barcode string, userID i
 		return nil, nil, nil, nil, fmt.Errorf("cette monture a déjà été réceptionnée")
 	}
 
-	location, err := s.allocation.FindFreeLocation(transfer.ToStationID, models.ZoneStock)
+	location, err := s.allocation.FindOrCreateStockLocation(transfer.ToStationID)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("erreur allocation emplacement: %w", err)
 	}
@@ -222,6 +229,10 @@ func (s *TransferService) ReceiveItem(transferID int64, barcode string, userID i
 }
 
 // GetTransfer récupère un transfert avec ses montures
+func (s *TransferService) ListItems(transferID int64) ([]models.TransferItem, error) {
+	return s.transferRepo.ListItems(transferID)
+}
+
 func (s *TransferService) GetTransfer(id int64) (*models.Transfer, []models.TransferItem, error) {
 	transfer, err := s.transferRepo.GetByID(id)
 	if err != nil {

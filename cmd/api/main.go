@@ -78,22 +78,32 @@ func main() {
 	glassRepo := repositories.NewGlassRepository(db)
 	locationRepo := repositories.NewLocationRepository(db)
 	analysisRepo := repositories.NewAnalysisRepository(db)
+	shapeCorrectionRepo := repositories.NewShapeCorrectionRepository(db)
 	movementRepo := repositories.NewMovementRepository(db)
 	transferRepo := repositories.NewTransferRepository(db)
 	userRepo := authRepositories.NewUserRepository(db)
+	stationRepo := authRepositories.NewStationRepository(db)
 	webauthnRepo := authRepositories.NewWebAuthnRepository(db)
 
 	// Initialiser les services
 	allocationSvc := services.NewAllocationService(db)
 	movementSvc := services.NewMovementService(movementRepo)
-	barcodeSvc := services.NewBarcodeService()
+	barcodeSvc := services.NewBarcodeService(db)
 	analysisSvc := services.NewAnalysisService(analysisRepo)
 	storageGeneratorSvc := services.NewStorageGeneratorService(db)
 	authSvc := authServices.NewAuthService(os.Getenv("JWT_SECRET"))
 	webauthnSvc := authServices.NewWebAuthnService(webauthnRepo, userRepo)
-	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc)
+	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
+	deliveryRepo := repositories.NewDeliveryRepository(db)
+	deliverySvc := services.NewDeliveryService(deliveryRepo, glassRepo, movementSvc)
+	saleRepo := repositories.NewSaleRepository(db)
+	reserveRepo := repositories.NewReserveRepository(db)
+	saleSvc := services.NewSaleService(saleRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
+	reserveSvc := services.NewReserveService(reserveRepo, glassRepo, movementRepo, allocationSvc)
+	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
+	similaritySvc := services.NewSimilarityService(glassRepo)
 
 	// Initialiser les workflows
 	receptionWorkflow := workflows.NewReceptionWorkflow(
@@ -102,39 +112,87 @@ func main() {
 		barcodeSvc,
 		analysisSvc,
 		storageSvc,
+		similaritySvc,
 		glassRepo,
 		locationRepo,
 		analysisRepo,
+		shapeCorrectionRepo,
 	)
 
 	// Initialiser les handlers
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
+	receptionCommandRepo := repositories.NewReceptionCommandRepository(db)
+	receptionCommandHandler := inventoryHandlers.NewReceptionCommandHandler(receptionCommandRepo)
+	supplierOrderRepo := repositories.NewSupplierOrderRepository(db)
+	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
+	// Delivery handler
+	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo)
+	saleHandler := inventoryHandlers.NewSaleHandler(saleSvc)
+	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc)
+	presentoirHandler := inventoryHandlers.NewPresentoirHandler(locationRepo)
+	movementHandler := inventoryHandlers.NewMovementHandler(movementRepo)
+	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
-	authHandler := authHandlers.NewAuthHandler(userRepo, authSvc, webauthnSvc)
+	chatHandler := inventoryHandlers.NewChatHandler(aiSvc)
+	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
 
 	// Créer le router Gin
 	router := gin.Default()
 
-	// CORS pour tests local
+	// Middleware de sécurité HTTP + CORS
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if c.Request.Method == "OPTIONS" {
+		// En-têtes de sécurité
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-XSS-Protection", "1; mode=block")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		c.Header("Cross-Origin-Opener-Policy", "same-origin")
+		c.Header("Cross-Origin-Embedder-Policy", "require-corp")
+		c.Header("Cross-Origin-Resource-Policy", "same-origin")
+		c.Header("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"img-src 'self' data: https:; "+
+				"font-src 'self' data: https://fonts.gstatic.com; "+
+				"connect-src 'self' https://lunetterie-frontend.onrender.com; "+
+				"frame-ancestors 'none'; "+
+				"base-uri 'self'; "+
+				"form-action 'self'")
+
+		origin := c.GetHeader("Origin")
+		allowedOrigins := []string{
+			"https://lunetterie-frontend.onrender.com",
+			"https://www.lunetterie-frontend.onrender.com",
+			"http://localhost:3000",
+			"http://localhost:8080",
+		}
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Vary", "Origin")
+				break
+			}
+		}
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token")
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type")
+		c.Header("Access-Control-Allow-Credentials", "true")
+
+		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 		c.Next()
 	})
 
-	// Fichiers statiques du frontend admin
+	// Fichiers statiques du frontend
 	frontendDir := findFrontendDir()
-	router.StaticFile("/admin.html", filepath.Join(frontendDir, "admin.html"))
-	router.StaticFile("/admin.css", filepath.Join(frontendDir, "admin.css"))
-	router.StaticFile("/admin.js", filepath.Join(frontendDir, "admin.js"))
 	router.StaticFile("/logo.jpeg", filepath.Join(frontendDir, "logo.jpeg"))
 	router.StaticFile("/login.css", filepath.Join(frontendDir, "login.css"))
 	router.StaticFile("/login.html", filepath.Join(frontendDir, "index.html"))
@@ -142,6 +200,14 @@ func main() {
 	router.StaticFile("/scan.html", filepath.Join(frontendDir, "scan.html"))
 	router.StaticFile("/scan.css", filepath.Join(frontendDir, "scan.css"))
 	router.StaticFile("/scan.js", filepath.Join(frontendDir, "scan.js"))
+	router.StaticFile("/direction.html", filepath.Join(frontendDir, "direction.html"))
+	router.StaticFile("/direction.css", filepath.Join(frontendDir, "direction.css"))
+	router.StaticFile("/direction.js", filepath.Join(frontendDir, "direction.js"))
+	router.StaticFile("/reception.html", filepath.Join(frontendDir, "reception.html"))
+	router.StaticFile("/reception.js", filepath.Join(frontendDir, "reception.js"))
+	router.StaticFile("/historique.html", filepath.Join(frontendDir, "historique.html"))
+	router.StaticFile("/historique.css", filepath.Join(frontendDir, "historique.css"))
+	router.StaticFile("/historique.js", filepath.Join(frontendDir, "historique.js"))
 
 	// Servi via c.Data (pas c.File/StaticFile, qui passent par http.ServeFile) : net/http
 	// redirige spécialement toute URL se terminant par "/index.html" vers "./", ce qui
@@ -154,6 +220,30 @@ func main() {
 			return
 		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	})
+
+	// Page admin protégée
+	adminGroup := router.Group("/")
+	adminGroup.Use(authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12))
+	{
+		adminGroup.GET("/admin.html", func(c *gin.Context) {
+			c.File(filepath.Join(frontendDir, "admin.html"))
+		})
+		adminGroup.GET("/admin.css", func(c *gin.Context) {
+			c.File(filepath.Join(frontendDir, "admin.css"))
+		})
+		adminGroup.GET("/admin.js", func(c *gin.Context) {
+			c.File(filepath.Join(frontendDir, "admin.js"))
+		})
+	}
+
+	// Rediriger /admin vers la page admin.
+	router.GET("/admin", func(c *gin.Context) {
+		if c.Query("debug") != "" {
+			c.Redirect(http.StatusTemporaryRedirect, "/index.html")
+			return
+		}
+		c.Redirect(http.StatusTemporaryRedirect, "/admin.html")
 	})
 
 	// Fichier de test HTML (page d'inscription biométrique)
@@ -195,22 +285,44 @@ func main() {
 
 			// Routes classiques (empreinte digitale hashée)
 			auth.POST("/register", authHandler.RegisterUser)
-			auth.POST("/register-fingerprint", authHandler.RegisterFingerprintUser)
+			// Création de compte avec role_id/station_id choisis librement par l'appelant :
+			// réservée aux rôles admin.
+			auth.POST("/register-fingerprint", authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.RegisterFingerprintUser)
 			auth.POST("/login-fingerprint", authHandler.LoginWithFingerprint)
-			auth.GET("/users", authHandler.ListUsers)
-			auth.POST("/users", authHandler.CreateUser)
+			auth.POST("/login", authHandler.LoginWithPassword)
+			auth.POST("/set-password", authHandler.SetInitialPassword)
+
+			auth.Use(authMiddleware.RequireAuth(authSvc))
+			{
+				auth.GET("/me", authHandler.GetMe)
+				auth.GET("/users", authHandler.ListUsers)
+				auth.GET("/stations", authHandler.ListStations)
+				auth.POST("/users", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.CreateUser)
+			}
 		}
 
-		// Routes inventaire
 		inventory := v1.Group("/inventory")
 		inventory.Use(authMiddleware.RequireAuth(authSvc))
 		{
 			inventory.POST("/reception", receptionHandler.HandleReception)
+			inventory.POST("/reception-commands", receptionCommandHandler.Create)
+			inventory.GET("/reception-commands", receptionCommandHandler.List)
+			inventory.GET("/reception-commands/:code", receptionCommandHandler.GetByCode)
+			inventory.POST("/reception-commands/:code/increment", receptionCommandHandler.Increment)
+			inventory.POST("/supplier-orders", supplierOrderHandler.Create)
+			inventory.GET("/supplier-orders", supplierOrderHandler.List)
+			inventory.DELETE("/supplier-orders/:id", supplierOrderHandler.Delete)
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
+			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
+			inventory.GET("/glasses", glassHandler.ListGlasses)
+			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
+			inventory.GET("/glasses/:barcode/similar", glassHandler.GetSimilarGlasses)
+			inventory.GET("/stock-summary", glassHandler.GetStockSummary)
 			storage := inventory.Group("/storage")
 			{
 				storage.POST("/generate", storageGeneratorHandler.GenerateLocations)
 				storage.POST("/find-free", storageGeneratorHandler.FindFreeLocation)
+				storage.GET("/next-free", storageGeneratorHandler.PreviewFreeLocation)
 			}
 			transfers := inventory.Group("/transfers")
 			{
@@ -221,6 +333,33 @@ func main() {
 				transfers.POST("/:id/dispatch", transferHandler.Dispatch)
 				transfers.POST("/:id/receive", transferHandler.ReceiveItem)
 			}
+			deliveries := inventory.Group("/deliveries")
+			{
+				// POST /api/v1/inventory/deliveries
+				// body: { station_id, barcodes: [...] }
+				deliveries.POST("", deliveryHandler.CreateDelivery)
+			}
+
+			sales := inventory.Group("/sales")
+			{
+				sales.POST("", saleHandler.CreateSale)
+			}
+			reserves := inventory.Group("/reserves")
+			{
+				reserves.POST("", reserveHandler.CreateReserve)
+			}
+			presentoir := inventory.Group("/presentoir")
+			{
+				presentoir.GET("/empty-slots", presentoirHandler.EmptySlotsToday)
+			}
+			inventory.GET("/movements", movementHandler.ListMovements)
+		}
+
+		// Assistant IA de direction (résumés/questions sur l'activité)
+		ai := v1.Group("/ai")
+		ai.Use(authMiddleware.RequireAuth(authSvc))
+		{
+			ai.POST("/chat", chatHandler.HandleChat)
 		}
 	}
 
