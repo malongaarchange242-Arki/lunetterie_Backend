@@ -46,11 +46,11 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		return
 	}
 
-	reply, action, err := h.aiService.Chat(body)
+	reply, actions, err := h.aiService.Chat(body)
 	if err != nil {
 		shared.InternalError(c, "Erreur lors de la réponse du chatbot: "+err.Error())
 		return
 	}
 
-	shared.Success(c, 200, gin.H{"reply": reply, "action": action})
+	shared.Success(c, 200, gin.H{"reply": reply, "actions": actions})
 }

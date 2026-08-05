@@ -215,15 +215,15 @@ type ChatAction struct {
 
 // rawChatResponse reflète le schéma renvoyé par POST /assistant/chat (app/api/chat.py).
 type rawChatResponse struct {
-	Reply  string      `json:"reply"`
-	Action *ChatAction `json:"action"`
+	Reply   string       `json:"reply"`
+	Actions []ChatAction `json:"actions"`
 }
 
 // Chat relaie tel quel (message + historique + contexte déjà construits par direction.js)
 // au chatbot de direction du service IA, qui construit le prompt et appelle Claude
 // (app/ai/chat.py). Contrairement à Analyze/AnalyzeBranche, pas de repli silencieux
 // possible ici : une erreur remonte telle quelle à l'appelant.
-func (s *AIService) Chat(payload []byte) (string, *ChatAction, error) {
+func (s *AIService) Chat(payload []byte) (string, []ChatAction, error) {
 	req, err := http.NewRequest(http.MethodPost, s.baseURL+"/assistant/chat", bytes.NewReader(payload))
 	if err != nil {
 		return "", nil, fmt.Errorf("erreur création requête chat: %w", err)
@@ -248,7 +248,7 @@ func (s *AIService) Chat(payload []byte) (string, *ChatAction, error) {
 	if err := json.Unmarshal(respBody, &raw); err != nil {
 		return "", nil, fmt.Errorf("réponse chat invalide: %w", err)
 	}
-	return raw.Reply, raw.Action, nil
+	return raw.Reply, raw.Actions, nil
 }
 
 // AnalyzeBranche envoie la photo de la branche au service IA pour OCR de la référence et de
