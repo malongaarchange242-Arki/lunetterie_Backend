@@ -51,6 +51,7 @@ func (r *UserRepository) FindByID(id int64) (*models.User, error) {
 func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 	user := models.User{}
 	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.password_hash, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, s.name AS station_name, u.is_active, u.last_login, u.created_at, u.updated_at,
+		u.setup_token, u.setup_token_expires_at,
 		(u.password_hash IS NOT NULL) AS has_password,
 		EXISTS(SELECT 1 FROM webauthn_credentials wc WHERE wc.user_id = u.id) AS webauthn_registered
 		FROM users u
@@ -64,13 +65,15 @@ func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 }
 
 func (r *UserRepository) Create(user *models.User) error {
-	query := `INSERT INTO users (first_name, last_name, email, phone, gender, role_id, station_id, is_active, password_hash, password_hash_deprecated, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', NOW(), NOW()) RETURNING id, created_at, updated_at`
-	return r.db.QueryRowx(query, user.FirstName, user.LastName, user.Email, user.Phone, user.Gender, user.RoleID, user.StationID, user.IsActive, user.PasswordHash).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	query := `INSERT INTO users (first_name, last_name, email, phone, gender, role_id, station_id, is_active, password_hash, password_hash_deprecated, setup_token, setup_token_expires_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', $10, $11, NOW(), NOW()) RETURNING id, created_at, updated_at`
+	return r.db.QueryRowx(query, user.FirstName, user.LastName, user.Email, user.Phone, user.Gender, user.RoleID, user.StationID, user.IsActive, user.PasswordHash, user.SetupToken, user.SetupTokenExpiresAt).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 }
 
+// SetPassword enregistre le mot de passe et invalide le jeton de configuration initiale
+// (à usage unique : une fois le mot de passe défini, le jeton ne doit plus être réutilisable).
 func (r *UserRepository) SetPassword(userID int64, passwordHash string) error {
-	query := `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
+	query := `UPDATE users SET password_hash = $1, setup_token = NULL, setup_token_expires_at = NULL, updated_at = NOW() WHERE id = $2`
 	_, err := r.db.Exec(query, passwordHash, userID)
 	return err
 }

@@ -291,12 +291,14 @@ func main() {
 			auth.POST("/login-fingerprint", authHandler.LoginWithFingerprint)
 			auth.POST("/login", authHandler.LoginWithPassword)
 			auth.POST("/set-password", authHandler.SetInitialPassword)
+			// Public : utilisée par la page de connexion avant authentification (étape email).
+			auth.POST("/check-email", authHandler.CheckEmail)
 
 			auth.Use(authMiddleware.RequireAuth(authSvc))
 			{
 				auth.GET("/me", authHandler.GetMe)
-				auth.GET("/users", authHandler.ListUsers)
-				auth.GET("/stations", authHandler.ListStations)
+				auth.GET("/users", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.ListUsers)
+				auth.GET("/stations", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.ListStations)
 				auth.POST("/users", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.CreateUser)
 			}
 		}
@@ -305,13 +307,25 @@ func main() {
 		inventory.Use(authMiddleware.RequireAuth(authSvc))
 		{
 			inventory.POST("/reception", receptionHandler.HandleReception)
-			inventory.POST("/reception-commands", receptionCommandHandler.Create)
-			inventory.GET("/reception-commands", receptionCommandHandler.List)
-			inventory.GET("/reception-commands/:code", receptionCommandHandler.GetByCode)
-			inventory.POST("/reception-commands/:code/increment", receptionCommandHandler.Increment)
-			inventory.POST("/supplier-orders", supplierOrderHandler.Create)
-			inventory.GET("/supplier-orders", supplierOrderHandler.List)
-			inventory.DELETE("/supplier-orders/:id", supplierOrderHandler.Delete)
+			// Créer/lister les sessions de réception est réservé à la direction/admin ;
+			// consulter un code précis et l'incrémenter reste ouvert à tout compte
+			// authentifié, car c'est ce que fait le poste de scan (rôle MAGASINIER en
+			// pratique) pendant la réception physique des montures.
+			receptionCommands := inventory.Group("/reception-commands")
+			{
+				receptionCommands.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), receptionCommandHandler.Create)
+				receptionCommands.GET("", authMiddleware.RequireRoles(1, 2, 8, 12), receptionCommandHandler.List)
+				receptionCommands.GET("/:code", receptionCommandHandler.GetByCode)
+				receptionCommands.POST("/:code/increment", receptionCommandHandler.Increment)
+			}
+
+			supplierOrders := inventory.Group("/supplier-orders")
+			supplierOrders.Use(authMiddleware.RequireRoles(1, 2, 8, 12))
+			{
+				supplierOrders.POST("", supplierOrderHandler.Create)
+				supplierOrders.GET("", supplierOrderHandler.List)
+				supplierOrders.DELETE("/:id", supplierOrderHandler.Delete)
+			}
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
 			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
 			inventory.GET("/glasses", glassHandler.ListGlasses)

@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/auth/dto"
@@ -12,6 +15,21 @@ import (
 	"github.com/lunetterie/backend/internal/auth/services"
 	"github.com/lunetterie/backend/internal/shared"
 )
+
+// setupTokenValidity : délai laissé à l'admin pour transmettre le jeton au nouvel
+// employé (SMS, en personne...) avant qu'il ne faille en régénérer un.
+const setupTokenValidity = 7 * 24 * time.Hour
+
+// generateSetupToken produit un jeton à usage unique imprévisible, exigé par
+// /auth/set-password en plus de l'email — sans ça, connaître l'email d'un compte
+// fraîchement créé suffisait à en prendre le contrôle avant sa première connexion.
+func generateSetupToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
 
 type AuthHandler struct {
 	userRepo        *repositories.UserRepository
@@ -151,6 +169,26 @@ func (h *AuthHandler) ListStations(c *gin.Context) {
 	})
 }
 
+// CheckEmail répond juste "ce compte existe-t-il, a-t-il déjà un mot de passe ?", pour
+// l'étape email de la page de connexion (avant authentification). Ne renvoie PAS le
+// reste du dossier utilisateur : contrairement à GET /auth/users (désormais réservé aux
+// rôles admin), cette route reste publique mais expose le minimum nécessaire.
+func (h *AuthHandler) CheckEmail(c *gin.Context) {
+	var req dto.CheckEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Email invalide")
+		return
+	}
+
+	user, err := h.userRepo.FindByEmail(req.Email)
+	if err != nil {
+		shared.Success(c, http.StatusOK, gin.H{"exists": false})
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{"exists": true, "has_password": user.HasPassword})
+}
+
 func (h *AuthHandler) CreateUser(c *gin.Context) {
 	var req dto.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -171,6 +209,7 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		IsActive:  true,
 	}
 
+	var setupToken string
 	if req.Password != "" {
 		hash, err := services.HashPassword(req.Password)
 		if err != nil {
@@ -178,6 +217,18 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 			return
 		}
 		user.PasswordHash = &hash
+	} else {
+		// Pas de mot de passe fourni par l'admin : le nouvel employé le définira lui-même
+		// via /auth/set-password, protégé par ce jeton à usage unique.
+		token, err := generateSetupToken()
+		if err != nil {
+			shared.InternalError(c, "Impossible de générer le jeton d'activation")
+			return
+		}
+		setupToken = token
+		expiresAt := time.Now().Add(setupTokenValidity)
+		user.SetupToken = &token
+		user.SetupTokenExpiresAt = &expiresAt
 	}
 
 	if err := h.userRepo.Create(user); err != nil {
@@ -185,9 +236,14 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	shared.Success(c, http.StatusCreated, gin.H{
-		"user": user,
-	})
+	response := gin.H{"user": user}
+	if setupToken != "" {
+		// Renvoyé UNE SEULE FOIS ici : à transmettre par l'admin au nouvel employé
+		// (SMS, en personne...) ; il n'est plus jamais exposé par la suite (jamais
+		// sérialisé sur le modèle User, voir son tag json:"-").
+		response["setup_token"] = setupToken
+	}
+	shared.Success(c, http.StatusCreated, response)
 }
 
 func (h *AuthHandler) SetInitialPassword(c *gin.Context) {
@@ -205,6 +261,15 @@ func (h *AuthHandler) SetInitialPassword(c *gin.Context) {
 
 	if user.PasswordHash != nil {
 		shared.BadRequest(c, "Un mot de passe est déjà défini pour ce compte")
+		return
+	}
+
+	// Preuve de possession du jeton transmis par l'admin, pas seulement de l'email :
+	// sans ce contrôle, connaître l'email suffisait à définir le mot de passe d'un
+	// compte qui n'a pas encore été activé par son titulaire légitime.
+	if user.SetupToken == nil || user.SetupTokenExpiresAt == nil ||
+		req.Token != *user.SetupToken || time.Now().After(*user.SetupTokenExpiresAt) {
+		shared.Unauthorized(c, "Jeton d'activation invalide ou expiré")
 		return
 	}
 
