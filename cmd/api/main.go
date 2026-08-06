@@ -300,6 +300,7 @@ func main() {
 
 			auth.Use(authMiddleware.RequireAuth(authSvc))
 			{
+				auth.POST("/logout", authHandler.Logout)
 				auth.GET("/me", authHandler.GetMe)
 				auth.GET("/users", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.ListUsers)
 				auth.GET("/stations", authHandler.ListStations)

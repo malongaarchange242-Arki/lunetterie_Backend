@@ -75,6 +75,12 @@ func (r *UserRepository) SetPassword(userID int64, passwordHash string) error {
 	return err
 }
 
+func (r *UserRepository) SetActive(userID int64, isActive bool) error {
+	query := `UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.Exec(query, isActive, userID)
+	return err
+}
+
 func (r *UserRepository) FindAll() ([]models.User, error) {
 	users := []models.User{}
 	query := `SELECT u.id, u.first_name, u.last_name, u.email, u.fingerprint_hash, u.gender, u.phone, u.role_id, r.name AS role_name, u.station_id, s.name AS station_name, u.is_active, u.last_login, u.created_at, u.updated_at,

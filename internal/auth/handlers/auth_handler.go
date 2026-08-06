@@ -243,6 +243,41 @@ func (h *AuthHandler) LoginWithPassword(c *gin.Context) {
 	})
 }
 
+func (h *AuthHandler) Logout(c *gin.Context) {
+	rawUserID, ok := c.Get("user_id")
+	if !ok {
+		shared.Unauthorized(c, "Non authentifié")
+		return
+	}
+
+	var userID int64
+	switch id := rawUserID.(type) {
+	case int64:
+		userID = id
+	case int:
+		userID = int64(id)
+	case string:
+		parsed, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			shared.Unauthorized(c, "Identifiant utilisateur invalide")
+			return
+		}
+		userID = parsed
+	default:
+		shared.Unauthorized(c, "Identifiant utilisateur invalide")
+		return
+	}
+
+	if err := h.userRepo.SetActive(userID, false); err != nil {
+		shared.InternalError(c, "Impossible de désactiver l'utilisateur")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
+		"message": "Déconnexion réussie",
+	})
+}
+
 // SetInitialPassword : première connexion d'un compte créé sans mot de passe
 // (voir CreateUser). Email + mot de passe suffisent, sans jeton supplémentaire.
 func (h *AuthHandler) SetInitialPassword(c *gin.Context) {
