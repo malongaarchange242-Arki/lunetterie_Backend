@@ -288,11 +288,15 @@ func main() {
 			// Création de compte avec role_id/station_id choisis librement par l'appelant :
 			// réservée aux rôles admin.
 			auth.POST("/register-fingerprint", authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.RegisterFingerprintUser)
-			auth.POST("/login-fingerprint", authHandler.LoginWithFingerprint)
-			auth.POST("/login", authHandler.LoginWithPassword)
-			auth.POST("/set-password", authHandler.SetInitialPassword)
+			// Rate limiting par IP (pas global : chaque IP a son propre compteur) sur les
+			// routes qui acceptent un secret devinable (mot de passe, jeton d'activation) —
+			// freine le brute-force sans jamais impacter les autres utilisateurs de l'API.
+			loginLimiter := authMiddleware.RateLimitByIP(1, 5)
+			auth.POST("/login-fingerprint", loginLimiter, authHandler.LoginWithFingerprint)
+			auth.POST("/login", loginLimiter, authHandler.LoginWithPassword)
+			auth.POST("/set-password", loginLimiter, authHandler.SetInitialPassword)
 			// Public : utilisée par la page de connexion avant authentification (étape email).
-			auth.POST("/check-email", authHandler.CheckEmail)
+			auth.POST("/check-email", loginLimiter, authHandler.CheckEmail)
 
 			auth.Use(authMiddleware.RequireAuth(authSvc))
 			{
