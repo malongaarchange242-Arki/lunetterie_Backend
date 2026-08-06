@@ -302,7 +302,7 @@ func main() {
 			{
 				auth.GET("/me", authHandler.GetMe)
 				auth.GET("/users", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.ListUsers)
-				auth.GET("/stations", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.ListStations)
+				auth.GET("/stations", authHandler.ListStations)
 				auth.POST("/users", authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.CreateUser)
 			}
 		}
