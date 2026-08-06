@@ -10,12 +10,7 @@ type User struct {
 	PasswordHashDeprecated *string `db:"password_hash_deprecated" json:"-"`
 	PasswordHash           *string `db:"password_hash" json:"-"`
 	HasPassword            bool    `db:"has_password" json:"has_password"`
-	// SetupToken preuve de possession exigée par /auth/set-password pour un compte
-	// fraîchement créé sans mot de passe (voir CreateUser) : jamais sérialisé (json:"-"),
-	// sauf explicitement dans la réponse de création elle-même.
-	SetupToken          *string    `db:"setup_token" json:"-"`
-	SetupTokenExpiresAt *time.Time `db:"setup_token_expires_at" json:"-"`
-	FingerprintHash     *string    `db:"fingerprint_hash" json:"fingerprint_hash,omitempty"`
+	FingerprintHash        *string `db:"fingerprint_hash" json:"fingerprint_hash,omitempty"`
 	WebAuthnRegistered  bool       `db:"webauthn_registered" json:"webauthn_registered"`
 	Gender              *string    `db:"gender" json:"gender,omitempty"`
 	Phone               *string    `db:"phone" json:"phone,omitempty"`

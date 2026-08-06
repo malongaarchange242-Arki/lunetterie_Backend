@@ -1,12 +1,9 @@
 package handlers
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/auth/dto"
@@ -15,21 +12,6 @@ import (
 	"github.com/lunetterie/backend/internal/auth/services"
 	"github.com/lunetterie/backend/internal/shared"
 )
-
-// setupTokenValidity : délai laissé à l'admin pour transmettre le jeton au nouvel
-// employé (SMS, en personne...) avant qu'il ne faille en régénérer un.
-const setupTokenValidity = 7 * 24 * time.Hour
-
-// generateSetupToken produit un jeton à usage unique imprévisible, exigé par
-// /auth/set-password en plus de l'email — sans ça, connaître l'email d'un compte
-// fraîchement créé suffisait à en prendre le contrôle avant sa première connexion.
-func generateSetupToken() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
-}
 
 type AuthHandler struct {
 	userRepo        *repositories.UserRepository
@@ -209,7 +191,6 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		IsActive:  true,
 	}
 
-	var setupToken string
 	if req.Password != "" {
 		hash, err := services.HashPassword(req.Password)
 		if err != nil {
@@ -217,18 +198,6 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 			return
 		}
 		user.PasswordHash = &hash
-	} else {
-		// Pas de mot de passe fourni par l'admin : le nouvel employé le définira lui-même
-		// via /auth/set-password, protégé par ce jeton à usage unique.
-		token, err := generateSetupToken()
-		if err != nil {
-			shared.InternalError(c, "Impossible de générer le jeton d'activation")
-			return
-		}
-		setupToken = token
-		expiresAt := time.Now().Add(setupTokenValidity)
-		user.SetupToken = &token
-		user.SetupTokenExpiresAt = &expiresAt
 	}
 
 	if err := h.userRepo.Create(user); err != nil {
@@ -236,65 +205,7 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	response := gin.H{"user": user}
-	if setupToken != "" {
-		// Renvoyé UNE SEULE FOIS ici : à transmettre par l'admin au nouvel employé
-		// (SMS, en personne...) ; il n'est plus jamais exposé par la suite (jamais
-		// sérialisé sur le modèle User, voir son tag json:"-").
-		response["setup_token"] = setupToken
-	}
-	shared.Success(c, http.StatusCreated, response)
-}
-
-func (h *AuthHandler) SetInitialPassword(c *gin.Context) {
-	var req dto.SetInitialPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.BadRequest(c, "Données invalides: "+err.Error())
-		return
-	}
-
-	user, err := h.userRepo.FindByEmail(req.Email)
-	if err != nil {
-		shared.Unauthorized(c, "Compte introuvable")
-		return
-	}
-
-	if user.PasswordHash != nil {
-		shared.BadRequest(c, "Un mot de passe est déjà défini pour ce compte")
-		return
-	}
-
-	// Preuve de possession du jeton transmis par l'admin, pas seulement de l'email :
-	// sans ce contrôle, connaître l'email suffisait à définir le mot de passe d'un
-	// compte qui n'a pas encore été activé par son titulaire légitime.
-	if user.SetupToken == nil || user.SetupTokenExpiresAt == nil ||
-		req.Token != *user.SetupToken || time.Now().After(*user.SetupTokenExpiresAt) {
-		shared.Unauthorized(c, "Jeton d'activation invalide ou expiré")
-		return
-	}
-
-	hash, err := services.HashPassword(req.Password)
-	if err != nil {
-		shared.InternalError(c, "Impossible de sécuriser le mot de passe")
-		return
-	}
-
-	if err := h.userRepo.SetPassword(user.ID, hash); err != nil {
-		shared.InternalError(c, "Impossible d'enregistrer le mot de passe")
-		return
-	}
-	user.HasPassword = true
-
-	token, err := h.authService.GenerateToken(user)
-	if err != nil {
-		shared.InternalError(c, "Erreur génération token")
-		return
-	}
-
-	shared.Success(c, http.StatusOK, gin.H{
-		"token": token,
-		"user":  user,
-	})
+	shared.Success(c, http.StatusCreated, gin.H{"user": user})
 }
 
 func (h *AuthHandler) LoginWithPassword(c *gin.Context) {

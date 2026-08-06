@@ -294,7 +294,6 @@ func main() {
 			loginLimiter := authMiddleware.RateLimitByIP(1, 5)
 			auth.POST("/login-fingerprint", loginLimiter, authHandler.LoginWithFingerprint)
 			auth.POST("/login", loginLimiter, authHandler.LoginWithPassword)
-			auth.POST("/set-password", loginLimiter, authHandler.SetInitialPassword)
 			// Public : utilisée par la page de connexion avant authentification (étape email).
 			auth.POST("/check-email", loginLimiter, authHandler.CheckEmail)
 
