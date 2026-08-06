@@ -296,6 +296,7 @@ func main() {
 			auth.POST("/login", loginLimiter, authHandler.LoginWithPassword)
 			// Public : utilisée par la page de connexion avant authentification (étape email).
 			auth.POST("/check-email", loginLimiter, authHandler.CheckEmail)
+			auth.POST("/set-password", loginLimiter, authHandler.SetInitialPassword)
 
 			auth.Use(authMiddleware.RequireAuth(authSvc))
 			{

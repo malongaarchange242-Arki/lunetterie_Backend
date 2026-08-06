@@ -243,6 +243,50 @@ func (h *AuthHandler) LoginWithPassword(c *gin.Context) {
 	})
 }
 
+// SetInitialPassword : première connexion d'un compte créé sans mot de passe
+// (voir CreateUser). Email + mot de passe suffisent, sans jeton supplémentaire.
+func (h *AuthHandler) SetInitialPassword(c *gin.Context) {
+	var req dto.SetInitialPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Données invalides: "+err.Error())
+		return
+	}
+
+	user, err := h.userRepo.FindByEmail(req.Email)
+	if err != nil {
+		shared.Unauthorized(c, "Compte introuvable")
+		return
+	}
+
+	if user.PasswordHash != nil {
+		shared.BadRequest(c, "Un mot de passe est déjà défini pour ce compte")
+		return
+	}
+
+	hash, err := services.HashPassword(req.Password)
+	if err != nil {
+		shared.InternalError(c, "Impossible de sécuriser le mot de passe")
+		return
+	}
+
+	if err := h.userRepo.SetPassword(user.ID, hash); err != nil {
+		shared.InternalError(c, "Impossible d'enregistrer le mot de passe")
+		return
+	}
+	user.HasPassword = true
+
+	token, err := h.authService.GenerateToken(user)
+	if err != nil {
+		shared.InternalError(c, "Erreur génération token")
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
+		"token": token,
+		"user":  user,
+	})
+}
+
 func (h *AuthHandler) GetMe(c *gin.Context) {
 	rawUserID, ok := c.Get("user_id")
 	if !ok {
