@@ -174,11 +174,15 @@ func main() {
 			"https://www.api-lunetterie.universearch.com",
 			"http://localhost:3000",
 			"http://localhost:8080",
+			"http://127.0.0.1:5501",
+			"http://127.0.0.1:8080",
 		}
+		isAllowedOrigin := false
 		for _, allowed := range allowedOrigins {
 			if origin == allowed || strings.HasSuffix(origin, ".onrender.com") {
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Vary", "Origin")
+				isAllowedOrigin = true
 				break
 			}
 		}
@@ -188,7 +192,11 @@ func main() {
 		c.Header("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
+			if isAllowedOrigin {
+				c.Status(http.StatusNoContent)
+			} else {
+				c.AbortWithStatus(http.StatusForbidden)
+			}
 			return
 		}
 		c.Next()
