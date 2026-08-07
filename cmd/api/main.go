@@ -80,6 +80,7 @@ func main() {
 	locationRepo := repositories.NewLocationRepository(db)
 	analysisRepo := repositories.NewAnalysisRepository(db)
 	countryRepo := repositories.NewCountryRepository(db)
+	cityRepo := repositories.NewCityRepository(db)
 	shapeCorrectionRepo := repositories.NewShapeCorrectionRepository(db)
 	movementRepo := repositories.NewMovementRepository(db)
 	transferRepo := repositories.NewTransferRepository(db)
