@@ -50,26 +50,7 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 		return
 	}
 
-	noteParts := []string{}
-	if trimmedNote := strings.TrimSpace(req.Note); trimmedNote != "" {
-		noteParts = append(noteParts, trimmedNote)
-	}
-	country := strings.TrimSpace(req.Country)
-	city := strings.TrimSpace(req.City)
-	if country != "" || city != "" {
-		locationParts := []string{}
-		if country != "" {
-			locationParts = append(locationParts, fmt.Sprintf("Pays: %s", country))
-		}
-		if city != "" {
-			locationParts = append(locationParts, fmt.Sprintf("Ville: %s", city))
-		}
-		locationText := strings.Join(locationParts, " | ")
-		if !containsLocation(noteParts, locationText) {
-			noteParts = append(noteParts, locationText)
-		}
-	}
-	note := strings.Join(noteParts, " | ")
+	note := buildExpeditionNote(req.Note, req.Country, req.City)
 
 	order := &models.SupplierOrder{
 		Supplier:  supplier,
@@ -93,9 +74,32 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 	shared.Created(c, gin.H{"order": order})
 }
 
-func containsLocation(noteParts []string, locationText string) bool {
+func buildExpeditionNote(rawNote string, country string, city string) string {
+	noteParts := []string{}
+	if trimmedNote := strings.TrimSpace(rawNote); trimmedNote != "" {
+		for _, part := range strings.Split(trimmedNote, "|") {
+			trimmedPart := strings.TrimSpace(part)
+			if trimmedPart != "" && !containsNotePart(noteParts, trimmedPart) {
+				noteParts = append(noteParts, trimmedPart)
+			}
+		}
+	}
+
+	country = strings.TrimSpace(country)
+	city = strings.TrimSpace(city)
+	if country != "" && !containsNotePart(noteParts, fmt.Sprintf("Pays: %s", country)) {
+		noteParts = append(noteParts, fmt.Sprintf("Pays: %s", country))
+	}
+	if city != "" && !containsNotePart(noteParts, fmt.Sprintf("Ville: %s", city)) {
+		noteParts = append(noteParts, fmt.Sprintf("Ville: %s", city))
+	}
+	return strings.Join(noteParts, " | ")
+}
+
+func containsNotePart(noteParts []string, candidate string) bool {
+	candidate = strings.ToLower(strings.TrimSpace(candidate))
 	for _, part := range noteParts {
-		if strings.Contains(strings.ToLower(part), strings.ToLower(locationText)) {
+		if strings.ToLower(strings.TrimSpace(part)) == candidate {
 			return true
 		}
 	}

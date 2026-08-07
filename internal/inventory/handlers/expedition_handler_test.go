@@ -24,6 +24,13 @@ func (s *stubExpeditionRepository) List() ([]models.SupplierOrder, error) {
 	return s.orders, s.err
 }
 
+func TestBuildExpeditionNoteAvoidsDuplicateLocationText(t *testing.T) {
+	note := buildExpeditionNote("Pays: Congo", "Congo", "Pointe-Noire")
+	if note != "Pays: Congo | Ville: Pointe-Noire" {
+		t.Fatalf("expected deduplicated location note, got %q", note)
+	}
+}
+
 func TestExpeditionHandlerListReturnsOrders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
