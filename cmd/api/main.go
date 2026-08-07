@@ -129,6 +129,7 @@ func main() {
 	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)
 	expeditionHandler := inventoryHandlers.NewExpeditionHandler(supplierOrderRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
+	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
 	// Delivery handler
@@ -328,6 +329,7 @@ func main() {
 		inventory.Use(authMiddleware.RequireAuth(authSvc))
 		{
 			inventory.GET("/countries", countryHandler.List)
+			inventory.GET("/cities", cityHandler.ListByCountry)
 			inventory.POST("/expeditions", expeditionHandler.Create)
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;
