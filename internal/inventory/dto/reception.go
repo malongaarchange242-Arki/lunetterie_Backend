@@ -9,6 +9,7 @@ type ReceptionRequest struct {
 	StationID   int64    `json:"station_id" form:"station_id" binding:"required"`
 	Notes       *string  `json:"notes" form:"notes"`
 	Price       *float64 `json:"price" form:"price"`
+	Gamme       *string  `json:"gamme" form:"gamme"`
 	// Champs saisis/corrigés manuellement (étape de vérification) : prioritaires sur l'analyse IA.
 	Reference *string `json:"reference" form:"reference"`
 	Brand     *string `json:"brand" form:"brand"`

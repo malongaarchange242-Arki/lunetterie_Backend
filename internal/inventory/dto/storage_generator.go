@@ -17,6 +17,8 @@ type GenerateLocationsRequest struct {
 
 // FindFreeLocationRequest représente la requête de recherche d'un emplacement libre
 type FindFreeLocationRequest struct {
-	StationID int64  `json:"station_id" binding:"required"`
-	Zone      string `json:"zone,omitempty"`
+	StationID int64    `json:"station_id" binding:"required"`
+	Zone      string   `json:"zone,omitempty"`
+	Price     *float64 `json:"price,omitempty"`
+	Gamme     string   `json:"gamme,omitempty"`
 }

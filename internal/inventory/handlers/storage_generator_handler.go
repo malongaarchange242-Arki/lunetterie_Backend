@@ -98,7 +98,19 @@ func (h *StorageGeneratorHandler) PreviewFreeLocation(c *gin.Context) {
 		zone = string(models.ZoneStock)
 	}
 
-	locationID, path, code, err := h.service.PeekFreeLocation(stationID, models.ZoneType(zone))
+	priceParam := c.Query("price")
+	var price *float64
+	if priceParam != "" {
+		parsed, err := strconv.ParseFloat(priceParam, 64)
+		if err != nil {
+			shared.BadRequest(c, "price invalide")
+			return
+		}
+		price = &parsed
+	}
+	gamme := c.Query("gamme")
+
+	locationID, path, code, err := h.service.PeekFreeLocationForPrice(stationID, models.ZoneType(zone), price, gamme)
 	if err != nil {
 		shared.NotFound(c, "Aucun emplacement libre trouvé")
 		return

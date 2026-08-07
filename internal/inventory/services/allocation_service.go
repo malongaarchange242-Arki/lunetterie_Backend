@@ -8,6 +8,12 @@ import (
 	"github.com/lunetterie/backend/internal/inventory/models"
 )
 
+const (
+	priceTierClassique = "classique"
+	priceTierMoyenne   = "moyenne"
+	priceTierLuxe      = "luxe"
+)
+
 // AllocationService gère l'allocation d'emplacements
 type AllocationService struct {
 	db *sqlx.DB
@@ -18,34 +24,105 @@ func NewAllocationService(db *sqlx.DB) *AllocationService {
 	return &AllocationService{db: db}
 }
 
-// FindFreeLocation trouve un emplacement libre dans une station
+// FindFreeLocation trouve un emplacement libre dans une station.
+// Les emplacements sont désormais partagés en trois pools selon la gamme :
+// classique, moyenne, luxe. Si aucun emplacement du pool demandé n'est libre,
+// on retombe sur le premier emplacement libre disponible de la zone.
 func (s *AllocationService) FindFreeLocation(stationID int64, zone models.ZoneType) (*models.StorageLocation, error) {
+	return s.findFreeLocationForTier(stationID, zone, "")
+}
+
+func (s *AllocationService) findFreeLocationForTier(stationID int64, zone models.ZoneType, tier string) (*models.StorageLocation, error) {
 	query := `
 		SELECT id, station_id, code, type, zone, status
 		FROM storage_locations
-		WHERE station_id = $1 
-		  AND zone = $2 
+		WHERE station_id = $1
+		  AND zone = $2
 		  AND status = 'LIBRE'
 		  AND type = 'POSITION'
-		ORDER BY code
-		LIMIT 1`
+		ORDER BY code`
 
-	var location models.StorageLocation
-	err := s.db.Get(&location, query, stationID, zone)
+	var locations []models.StorageLocation
+	err := s.db.Select(&locations, query, stationID, zone)
 	if err != nil {
-		return nil, fmt.Errorf("aucun emplacement libre trouvé dans %s: %w", zone, err)
+		return nil, fmt.Errorf("impossible de lister les emplacements libres: %w", err)
+	}
+	if len(locations) == 0 {
+		return nil, fmt.Errorf("aucun emplacement libre trouvé dans %s", zone)
 	}
 
-	// Marquer l'emplacement comme occupé
+	selected := selectLocationByTier(locations, tier)
+	if selected == nil {
+		selected = &locations[0]
+	}
+
 	_, err = s.db.Exec(
 		"UPDATE storage_locations SET status = 'OCCUPE' WHERE id = $1",
-		location.ID,
+		selected.ID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("impossible de réserver l'emplacement: %w", err)
 	}
 
-	return &location, nil
+	return selected, nil
+}
+
+func classifyPriceTier(price *float64, gamme string) string {
+	if strings.TrimSpace(strings.ToLower(gamme)) != "" {
+		return strings.ToLower(strings.TrimSpace(gamme))
+	}
+	if price == nil {
+		return priceTierClassique
+	}
+	value := *price
+	if value > 100000 {
+		return priceTierLuxe
+	}
+	if value > 50000 {
+		return priceTierMoyenne
+	}
+	return priceTierClassique
+}
+
+func selectLocationByTier(locations []models.StorageLocation, tier string) *models.StorageLocation {
+	normalizedTier := strings.ToLower(strings.TrimSpace(tier))
+	if normalizedTier == "" {
+		return nil
+	}
+
+	var preferred []models.StorageLocation
+	var fallback []models.StorageLocation
+	for _, location := range locations {
+		code := strings.ToUpper(location.Code)
+		switch normalizedTier {
+		case priceTierClassique:
+			if strings.Contains(code, "POS-0") || strings.Contains(code, "POS-01") || strings.Contains(code, "POS-02") || strings.Contains(code, "POS-03") || strings.Contains(code, "POS-04") || strings.Contains(code, "POS-05") {
+				preferred = append(preferred, location)
+			} else {
+				fallback = append(fallback, location)
+			}
+		case priceTierMoyenne:
+			if strings.Contains(code, "POS-06") || strings.Contains(code, "POS-07") || strings.Contains(code, "POS-08") || strings.Contains(code, "POS-09") || strings.Contains(code, "POS-10") {
+				preferred = append(preferred, location)
+			} else {
+				fallback = append(fallback, location)
+			}
+		case priceTierLuxe:
+			if strings.Contains(code, "POS-11") || strings.Contains(code, "POS-12") || strings.Contains(code, "POS-13") || strings.Contains(code, "POS-14") || strings.Contains(code, "POS-15") {
+				preferred = append(preferred, location)
+			} else {
+				fallback = append(fallback, location)
+			}
+		}
+	}
+
+	if len(preferred) > 0 {
+		return &preferred[0]
+	}
+	if len(fallback) > 0 {
+		return &fallback[0]
+	}
+	return nil
 }
 
 func codePrefix(code string) string {
@@ -161,6 +238,12 @@ func (s *AllocationService) FindOrCreatePresentoirLocation(stationID int64, barc
 // silence dès qu'aucun emplacement de stock n'est disponible.
 func (s *AllocationService) FindOrCreateStockLocation(stationID int64) (*models.StorageLocation, error) {
 	return s.findOrCreateLocation(stationID, models.ZoneStock)
+}
+
+// FindFreeLocationForPrice allocates a stock location from a dedicated tier pool.
+func (s *AllocationService) FindFreeLocationForPrice(stationID int64, zone models.ZoneType, price *float64, gamme string) (*models.StorageLocation, error) {
+	tier := classifyPriceTier(price, gamme)
+	return s.findFreeLocationForTier(stationID, zone, tier)
 }
 
 // FreeLocation libère un emplacement

@@ -124,7 +124,11 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	}
 
 	if location == nil {
-		location, allocErr = w.allocationService.FindFreeLocation(req.StationID, models.ZoneStock)
+		var gamme string
+		if req.Gamme != nil {
+			gamme = *req.Gamme
+		}
+		location, allocErr = w.allocationService.FindFreeLocationForPrice(req.StationID, models.ZoneStock, req.Price, gamme)
 		if allocErr != nil {
 			return nil, fmt.Errorf("erreur allocation: %w", allocErr)
 		}

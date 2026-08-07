@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -169,11 +170,13 @@ func main() {
 		allowedOrigins := []string{
 			"https://lunetterie-frontend.onrender.com",
 			"https://www.lunetterie-frontend.onrender.com",
+			"https://api-lunetterie.universearch.com",
+			"https://www.api-lunetterie.universearch.com",
 			"http://localhost:3000",
 			"http://localhost:8080",
 		}
 		for _, allowed := range allowedOrigins {
-			if origin == allowed {
+			if origin == allowed || strings.HasSuffix(origin, ".onrender.com") {
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Vary", "Origin")
 				break
