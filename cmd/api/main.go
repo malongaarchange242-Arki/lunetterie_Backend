@@ -79,6 +79,7 @@ func main() {
 	glassRepo := repositories.NewGlassRepository(db)
 	locationRepo := repositories.NewLocationRepository(db)
 	analysisRepo := repositories.NewAnalysisRepository(db)
+	countryRepo := repositories.NewCountryRepository(db)
 	shapeCorrectionRepo := repositories.NewShapeCorrectionRepository(db)
 	movementRepo := repositories.NewMovementRepository(db)
 	transferRepo := repositories.NewTransferRepository(db)
@@ -126,6 +127,8 @@ func main() {
 	receptionCommandHandler := inventoryHandlers.NewReceptionCommandHandler(receptionCommandRepo)
 	supplierOrderRepo := repositories.NewSupplierOrderRepository(db)
 	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)
+	expeditionHandler := inventoryHandlers.NewExpeditionHandler(supplierOrderRepo)
+	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
 	// Delivery handler
@@ -324,6 +327,8 @@ func main() {
 		inventory := v1.Group("/inventory")
 		inventory.Use(authMiddleware.RequireAuth(authSvc))
 		{
+			inventory.GET("/countries", countryHandler.List)
+			inventory.POST("/expeditions", expeditionHandler.Create)
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;
 			// consulter un code précis et l'incrémenter reste ouvert à tout compte
