@@ -21,7 +21,10 @@ type ExpeditionHandler struct {
 	repo expeditionRepository
 }
 
-func NewExpeditionHandler(repo interface{ Create(*models.SupplierOrder) error; List() ([]models.SupplierOrder, error) }) *ExpeditionHandler {
+func NewExpeditionHandler(repo interface {
+	Create(*models.SupplierOrder) error
+	List() ([]models.SupplierOrder, error)
+}) *ExpeditionHandler {
 	return &ExpeditionHandler{repo: repo}
 }
 
@@ -51,11 +54,17 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 	if trimmedNote := strings.TrimSpace(req.Note); trimmedNote != "" {
 		noteParts = append(noteParts, trimmedNote)
 	}
-	if trimmedCountry := strings.TrimSpace(req.Country); trimmedCountry != "" {
-		noteParts = append(noteParts, fmt.Sprintf("Pays: %s", trimmedCountry))
-	}
-	if trimmedCity := strings.TrimSpace(req.City); trimmedCity != "" {
-		noteParts = append(noteParts, fmt.Sprintf("Ville: %s", trimmedCity))
+	country := strings.TrimSpace(req.Country)
+	city := strings.TrimSpace(req.City)
+	if country != "" || city != "" {
+		locationParts := []string{}
+		if country != "" {
+			locationParts = append(locationParts, fmt.Sprintf("Pays: %s", country))
+		}
+		if city != "" {
+			locationParts = append(locationParts, fmt.Sprintf("Ville: %s", city))
+		}
+		noteParts = append(noteParts, strings.Join(locationParts, " | "))
 	}
 	note := strings.Join(noteParts, " | ")
 
