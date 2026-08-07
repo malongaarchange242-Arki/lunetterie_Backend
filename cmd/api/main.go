@@ -331,6 +331,7 @@ func main() {
 		{
 			inventory.GET("/countries", countryHandler.List)
 			inventory.GET("/cities", cityHandler.ListByCountry)
+			inventory.GET("/expeditions", expeditionHandler.List)
 			inventory.POST("/expeditions", expeditionHandler.Create)
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;

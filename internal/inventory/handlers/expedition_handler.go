@@ -2,21 +2,26 @@ package handlers
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/models"
-	"github.com/lunetterie/backend/internal/inventory/repositories"
 	"github.com/lunetterie/backend/internal/shared"
 )
 
-type ExpeditionHandler struct {
-	repo *repositories.SupplierOrderRepository
+type expeditionRepository interface {
+	Create(order *models.SupplierOrder) error
+	List() ([]models.SupplierOrder, error)
 }
 
-func NewExpeditionHandler(repo *repositories.SupplierOrderRepository) *ExpeditionHandler {
+type ExpeditionHandler struct {
+	repo expeditionRepository
+}
+
+func NewExpeditionHandler(repo interface{ Create(*models.SupplierOrder) error; List() ([]models.SupplierOrder, error) }) *ExpeditionHandler {
 	return &ExpeditionHandler{repo: repo}
 }
 
@@ -74,4 +79,13 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 	}
 
 	shared.Created(c, gin.H{"order": order})
+}
+
+func (h *ExpeditionHandler) List(c *gin.Context) {
+	orders, err := h.repo.List()
+	if err != nil {
+		shared.InternalError(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"orders": orders})
 }
