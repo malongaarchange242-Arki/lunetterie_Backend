@@ -64,7 +64,10 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 		if city != "" {
 			locationParts = append(locationParts, fmt.Sprintf("Ville: %s", city))
 		}
-		noteParts = append(noteParts, strings.Join(locationParts, " | "))
+		locationText := strings.Join(locationParts, " | ")
+		if !containsLocation(noteParts, locationText) {
+			noteParts = append(noteParts, locationText)
+		}
 	}
 	note := strings.Join(noteParts, " | ")
 
@@ -88,6 +91,15 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 	}
 
 	shared.Created(c, gin.H{"order": order})
+}
+
+func containsLocation(noteParts []string, locationText string) bool {
+	for _, part := range noteParts {
+		if strings.Contains(strings.ToLower(part), strings.ToLower(locationText)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *ExpeditionHandler) List(c *gin.Context) {
