@@ -77,10 +77,10 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
-			lm.author AS last_action_by, lm.action AS last_action
+			reg.author AS registered_by
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
-		LEFT JOIN storage_locations sl ON sl.id = g.location_id` + lastMovementJoin + `
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id` + registrationJoin + `
 		WHERE g.station_id = $1 AND g.status = ANY($2)
 		ORDER BY g.created_at DESC`
 	if err := r.db.Select(&items, query, stationID, pq.Array(statuses)); err != nil {
@@ -117,19 +117,22 @@ func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryIte
 	return items, nil
 }
 
-// lastMovementJoin rattache à chaque monture l'auteur et l'action de son dernier mouvement.
-// LEFT JOIN LATERAL et non une sous-requête corrélée par colonne : une seule lecture de
-// movements pour les deux champs, et une monture sans mouvement reste dans le résultat.
-const lastMovementJoin = `
+// registrationJoin rattache à chaque monture l'employé qui l'a enregistrée. L'enregistrement
+// crée un mouvement RECEPTION_FOURNISSEUR (voir reception_workflow.go), c'est donc lui qu'on
+// cherche en priorité. Le workflow n'échoue pas si la création du mouvement échoue : le tri
+// retombe alors sur le plus ancien mouvement, faute de mieux.
+//
+// LEFT JOIN LATERAL et non sous-requête corrélée : une monture sans aucun mouvement reste
+// dans le résultat, avec un auteur nul.
+const registrationJoin = `
 		LEFT JOIN LATERAL (
-			SELECT m.action,
-				NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), '') AS author
+			SELECT NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), '') AS author
 			FROM movements m
 			LEFT JOIN users u ON u.id = m.user_id
 			WHERE m.glass_id = g.id
-			ORDER BY m.created_at DESC, m.id DESC
+			ORDER BY (m.action = 'RECEPTION_FOURNISSEUR') DESC, m.created_at ASC, m.id ASC
 			LIMIT 1
-		) lm ON TRUE`
+		) reg ON TRUE`
 
 // FindByStatuses liste les montures filtrées par statut, toutes stations confondues.
 func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListItem, error) {
@@ -139,11 +142,11 @@ func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListI
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
-			lm.author AS last_action_by, lm.action AS last_action
+			reg.author AS registered_by
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
-		LEFT JOIN stations s ON s.id = g.station_id` + lastMovementJoin + `
+		LEFT JOIN stations s ON s.id = g.station_id` + registrationJoin + `
 		WHERE g.status = ANY($1)
 		ORDER BY g.created_at DESC`
 	if err := r.db.Select(&items, query, pq.Array(statuses)); err != nil {

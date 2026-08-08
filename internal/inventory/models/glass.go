@@ -44,10 +44,9 @@ type GlassListItem struct {
 	LocationCode    *string   `db:"location_code" json:"location_code,omitempty"`
 	PhotoMontureURL *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
 	PhotoBrancheURL *string   `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
-	// La table glasses ne porte pas d'auteur : c'est le dernier mouvement de la monture
-	// qui dit qui l'a manipulée en dernier, et pour quelle action.
-	LastActionBy *string `db:"last_action_by" json:"last_action_by,omitempty"`
-	LastAction   *string `db:"last_action" json:"last_action,omitempty"`
+	// La table glasses ne porte pas d'auteur : celui qui a enregistré la monture est
+	// l'utilisateur de son mouvement RECEPTION_FOURNISSEUR.
+	RegisteredBy *string `db:"registered_by" json:"registered_by,omitempty"`
 }
 
 // SimilarGlass représente une monture candidate au classement de similarité, avec le score
