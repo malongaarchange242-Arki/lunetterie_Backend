@@ -51,12 +51,16 @@ type SendListSkippedItem struct {
 
 // SendListDispatchResult résume ce qui est réellement parti.
 type SendListDispatchResult struct {
-	StationID   int64                 `json:"station_id"`
-	StationName string                `json:"station_name"`
-	City        string                `json:"city"`
-	SentCount   int                   `json:"sent_count"`
-	Status      string                `json:"status"`
-	Skipped     []SendListSkippedItem `json:"skipped"`
+	StationID    int64                 `json:"station_id"`
+	StationName  string                `json:"station_name"`
+	City         string                `json:"city"`
+	SentCount    int                   `json:"sent_count"`
+	Status       string                `json:"status"`
+	Skipped      []SendListSkippedItem `json:"skipped"`
+	BoxID        int64                 `json:"box_id,omitempty"`
+	BoxCode      string                `json:"box_code,omitempty"`
+	BoxReference string                `json:"box_reference,omitempty"`
+	BoxItemCount int                   `json:"box_item_count,omitempty"`
 }
 
 // Dispatch envoie toutes les montures d'une liste vers la station locale de sa ville.
@@ -100,6 +104,12 @@ func (s *SendListDispatchService) Dispatch(listID, fromStationID, userID int64) 
 		sent++
 	}
 
+	// On matérialise le carton de départ après la résolution et les mouvements effectifs.
+	box, err := s.sendListRepo.CreateDispatchBox(list, items)
+	if err != nil {
+		return nil, err
+	}
+
 	// La liste n'est clôturée qu'une fois les montures réellement parties : si l'envoi échoue
 	// en route, elle reste ouverte et le magasinier peut le relancer — les montures déjà
 	// déplacées seront alors ignorées (déjà en stock à destination).
@@ -108,12 +118,16 @@ func (s *SendListDispatchService) Dispatch(listID, fromStationID, userID int64) 
 	}
 
 	return &SendListDispatchResult{
-		StationID:   station.ID,
-		StationName: station.Name,
-		City:        list.City,
-		SentCount:   sent,
-		Status:      string(models.StatusEnStockSousStation),
-		Skipped:     skipped,
+		StationID:    station.ID,
+		StationName:  station.Name,
+		City:         list.City,
+		SentCount:    sent,
+		Status:       string(models.StatusEnStockSousStation),
+		Skipped:      skipped,
+		BoxID:        box.ID,
+		BoxCode:      box.Code,
+		BoxReference: box.Reference,
+		BoxItemCount: box.ItemCount,
 	}, nil
 }
 

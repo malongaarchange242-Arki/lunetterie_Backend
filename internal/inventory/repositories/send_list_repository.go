@@ -2,6 +2,8 @@ package repositories
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -14,6 +16,95 @@ type SendListRepository struct {
 
 func NewSendListRepository(db *sqlx.DB) *SendListRepository {
 	return &SendListRepository{db: db}
+}
+
+// CreateDispatchBox persiste un carton associé à l'envoi complet d'une liste de réception.
+func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []models.SendListItem) (*models.SendBox, error) {
+	if list == nil {
+		return nil, fmt.Errorf("liste invalide pour carton")
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("liste vide pour carton")
+	}
+
+	code := buildSendBoxCode(list.SessionCode)
+	reference := buildSendBoxReference(list.SessionCode)
+	box := &models.SendBox{
+		ListID:      list.ID,
+		Code:        code,
+		Reference:   reference,
+		City:        list.City,
+		SessionCode: list.SessionCode,
+		ItemCount:   len(items),
+		Status:      "CREATED",
+	}
+
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return nil, fmt.Errorf("impossible d'ouvrir la transaction carton: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	header := `
+        INSERT INTO send_boxes (list_id, code, reference, city, session_code, item_count, status, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, created_at, updated_at`
+	if err := tx.QueryRowx(header,
+		list.ID,
+		box.Code,
+		box.Reference,
+		list.City,
+		list.SessionCode,
+		len(items),
+		box.Status,
+		list.CreatedBy,
+	).Scan(&box.ID, &box.CreatedAt, &box.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("impossible d'enregistrer le carton: %w", err)
+	}
+
+	line := `
+        INSERT INTO send_box_items (box_id, list_item_id, glass_id, barcode, reference, location_code)
+        VALUES ($1, $2, $3, $4, $5, $6)`
+	for _, item := range items {
+		if _, err := tx.Exec(line,
+			box.ID,
+			item.ID,
+			item.GlassID,
+			nullIfEmptyFromString(item.Barcode),
+			nullIfEmptyFromString(item.Reference),
+			nullIfEmptyFromString(item.LocationCode),
+		); err != nil {
+			return nil, fmt.Errorf("impossible d'enregistrer la ligne carton: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("impossible de valider le carton: %w", err)
+	}
+	return box, nil
+}
+
+func nullIfEmptyFromString(value *string) interface{} {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil
+	}
+	return *value
+}
+
+func buildSendBoxCode(sessionCode string) string {
+	clean := strings.ToUpper(strings.TrimSpace(sessionCode))
+	if clean == "" {
+		clean = "LISTE"
+	}
+	return fmt.Sprintf("CB-%s-%d", clean, time.Now().UnixNano()%100000)
+}
+
+func buildSendBoxReference(sessionCode string) string {
+	clean := strings.ToUpper(strings.TrimSpace(sessionCode))
+	if clean == "" {
+		clean = "LISTE"
+	}
+	return fmt.Sprintf("COL-%s-%d", clean, time.Now().UnixNano()%1000000)
 }
 
 // Create insère l'en-tête et ses lignes dans une transaction : une liste enregistrée sans
