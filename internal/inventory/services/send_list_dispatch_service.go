@@ -117,6 +117,10 @@ func (s *SendListDispatchService) Dispatch(listID, fromStationID, userID int64) 
 		return nil, err
 	}
 
+	if _, err := s.sendListRepo.MarkSentCount([]int64{listID}, int64(sent), station.Name); err != nil {
+		return nil, err
+	}
+
 	return &SendListDispatchResult{
 		StationID:    station.ID,
 		StationName:  station.Name,

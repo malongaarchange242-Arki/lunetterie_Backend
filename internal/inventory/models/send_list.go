@@ -5,14 +5,16 @@ import "time"
 // SendList est la liste des montures d'une session de réception, envoyée par la direction
 // vers un magasin. Elle sert d'ordre de préparation au poste de scan du stock général.
 type SendList struct {
-	ID          int64     `db:"id" json:"id"`
-	SessionCode string    `db:"session_code" json:"session_code"`
-	City        string    `db:"city" json:"city"`
-	ItemCount   int       `db:"item_count" json:"item_count"`
-	Status      string    `db:"status" json:"status"`
-	CreatedBy   *int64    `db:"created_by" json:"created_by,omitempty"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
+	ID                     int64     `db:"id" json:"id"`
+	SessionCode            string    `db:"session_code" json:"session_code"`
+	City                   string    `db:"city" json:"city"`
+	ItemCount              int       `db:"item_count" json:"item_count"`
+	Status                 string    `db:"status" json:"status"`
+	SentCount              int       `db:"sent_count" json:"sent_count"`
+	DestinationStationName *string   `db:"destination_station_name" json:"destination_station_name,omitempty"`
+	CreatedBy              *int64    `db:"created_by" json:"created_by,omitempty"`
+	CreatedAt              time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt              time.Time `db:"updated_at" json:"updated_at"`
 }
 
 // SendListItem recopie les attributs de la monture au moment de l'envoi : la liste doit

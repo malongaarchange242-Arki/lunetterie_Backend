@@ -156,7 +156,7 @@ func nullIfEmpty(value string) interface{} {
 func (r *SendListRepository) List(status string) ([]models.SendList, error) {
 	lists := []models.SendList{}
 	query := `
-        SELECT id, session_code, city, item_count, status, created_by, created_at, updated_at
+        SELECT id, session_code, city, item_count, status, sent_count, destination_station_name, created_by, created_at, updated_at
         FROM send_lists
         WHERE ($1 = '' OR status = $1)
         ORDER BY created_at DESC`
@@ -171,7 +171,7 @@ func (r *SendListRepository) List(status string) ([]models.SendList, error) {
 func (r *SendListRepository) GetByID(id int64) (*models.SendList, error) {
 	var list models.SendList
 	query := `
-        SELECT id, session_code, city, item_count, status, created_by, created_at, updated_at
+        SELECT id, session_code, city, item_count, status, sent_count, destination_station_name, created_by, created_at, updated_at
         FROM send_lists
         WHERE id = $1`
 	if err := r.db.Get(&list, query, id); err != nil {
@@ -207,7 +207,7 @@ func (r *SendListRepository) MarkProcessed(ids []int64) (int64, error) {
 	}
 	result, err := r.db.Exec(`
         UPDATE send_lists
-        SET status = 'TRAITEE', updated_at = NOW()
+        SET status = 'TRAITEE', sent_count = item_count, updated_at = NOW()
         WHERE id = ANY($1) AND status <> 'TRAITEE'`, pq.Array(ids))
 	if err != nil {
 		return 0, fmt.Errorf("impossible de clôturer les listes: %w", err)
@@ -217,6 +217,34 @@ func (r *SendListRepository) MarkProcessed(ids []int64) (int64, error) {
 		return 0, fmt.Errorf("impossible de vérifier la mise à jour: %w", err)
 	}
 	return rows, nil
+}
+
+func (r *SendListRepository) MarkSentCount(ids []int64, sentCount int64, stationName string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result, err := r.db.Exec(`
+        UPDATE send_lists
+        SET sent_count = $2,
+            destination_station_name = $3,
+            status = CASE WHEN status <> 'TRAITEE' THEN 'TRAITEE' ELSE status END,
+            updated_at = NOW()
+        WHERE id = ANY($1)`, pq.Array(ids), sentCount, nullIfEmptyForDB(stationName))
+	if err != nil {
+		return 0, fmt.Errorf("impossible de mémoriser le résultat d'envoi: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("impossible de vérifier la mise à jour: %w", err)
+	}
+	return rows, nil
+}
+
+func nullIfEmptyForDB(value string) interface{} {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
 }
 
 // MarkSeen fait passer les listes de NOUVELLE à VUE. Le filtre sur NOUVELLE rend l'appel
