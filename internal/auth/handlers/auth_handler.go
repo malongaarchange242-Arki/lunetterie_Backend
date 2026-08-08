@@ -29,6 +29,22 @@ func stringPtr(s string) *string {
 	return &s
 }
 
+func normalizeEmail(rawEmail, firstName, lastName string) string {
+	email := strings.TrimSpace(rawEmail)
+	if email != "" {
+		return email
+	}
+
+	base := strings.ToLower(strings.TrimSpace(firstName + "." + lastName))
+	base = strings.ReplaceAll(base, " ", "")
+	base = strings.ReplaceAll(base, "-", "")
+	base = strings.ReplaceAll(base, "'", "")
+	if base == "" {
+		return "user@local.invalid"
+	}
+	return base + "@local.invalid"
+}
+
 func NewAuthHandler(userRepo *repositories.UserRepository, stationRepo *repositories.StationRepository, authService *services.AuthService, webauthnService *services.WebAuthnService) *AuthHandler {
 	return &AuthHandler{userRepo: userRepo, stationRepo: stationRepo, authService: authService, webauthnService: webauthnService}
 }
@@ -193,7 +209,7 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 
 	firstName := strings.TrimSpace(req.FirstName)
 	lastName := strings.TrimSpace(req.LastName)
-	email := strings.TrimSpace(req.Email)
+	email := normalizeEmail(req.Email, firstName, lastName)
 	phone := strings.TrimSpace(req.Phone)
 	gender := strings.TrimSpace(req.Gender)
 	city := strings.TrimSpace(req.City)
