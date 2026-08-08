@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/auth/dto"
@@ -190,15 +191,19 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	firstName := req.FirstName
-	lastName := req.LastName
+	firstName := strings.TrimSpace(req.FirstName)
+	lastName := strings.TrimSpace(req.LastName)
+	email := strings.TrimSpace(req.Email)
+	phone := strings.TrimSpace(req.Phone)
+	gender := strings.TrimSpace(req.Gender)
+	city := strings.TrimSpace(req.City)
 	user := &models.User{
 		FirstName: firstName,
 		LastName:  lastName,
-		Email:     req.Email,
-		Phone:     stringPtr(req.Phone),
-		Gender:    stringPtr(req.Gender),
-		City:      stringPtr(req.City),
+		Email:     email,
+		Phone:     stringPtr(phone),
+		Gender:    stringPtr(gender),
+		City:      stringPtr(city),
 		RoleID:    req.RoleID,
 		StationID: req.StationID,
 		IsActive:  true,

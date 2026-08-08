@@ -75,6 +75,10 @@ func main() {
 
 	log.Println("✅ Connecté à PostgreSQL")
 
+	if _, err := db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS city VARCHAR(100)`); err != nil {
+		log.Printf("⚠️ Impossible d'ajouter la colonne users.city: %v", err)
+	}
+
 	// Initialiser les repositories
 	glassRepo := repositories.NewGlassRepository(db)
 	locationRepo := repositories.NewLocationRepository(db)
