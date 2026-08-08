@@ -132,6 +132,8 @@ func main() {
 	supplierOrderRepo := repositories.NewSupplierOrderRepository(db)
 	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)
 	expeditionHandler := inventoryHandlers.NewExpeditionHandler(supplierOrderRepo)
+	demandBasketRepo := repositories.NewDemandBasketRepository(db)
+	demandBasketHandler := inventoryHandlers.NewDemandBasketHandler(demandBasketRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
@@ -336,6 +338,16 @@ func main() {
 			inventory.GET("/cities", cityHandler.ListByCountry)
 			inventory.GET("/expeditions", expeditionHandler.List)
 			inventory.POST("/expeditions", expeditionHandler.Create)
+
+			// Paniers de demande, un par magasin (ville). Ouvert à tout compte authentifié :
+			// c'est le chatbot qui y dépose une ligne à chaque recherche de monture.
+			baskets := inventory.Group("/baskets")
+			{
+				baskets.POST("", demandBasketHandler.Create)
+				baskets.GET("", demandBasketHandler.List)
+				baskets.GET("/counts", demandBasketHandler.Counts)
+				baskets.POST("/sent", demandBasketHandler.MarkSent)
+			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;
 			// consulter un code précis et l'incrémenter reste ouvert à tout compte

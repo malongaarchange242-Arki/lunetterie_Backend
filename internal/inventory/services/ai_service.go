@@ -206,11 +206,22 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 }
 
 // ChatAction décrit une action UI que le frontend doit exécuter en plus d'afficher la
-// réponse texte (ex. ouvrir une page du tableau de bord) — voir navigate_to_page côté
-// app/ai/chat.py.
+// réponse texte — voir navigate_to_page et rechercher_monture côté app/ai/chat.py.
+//
+//	type "navigate" : Page est renseigné, ouvrir la page correspondante.
+//	type "search"   : Ville + les critères exprimés sont renseignés, déposer une ligne
+//	                  dans le panier de demande du magasin (POST /inventory/baskets).
+//
+// Les critères sont volontairement facultatifs : le chatbot ne renseigne que ceux que le
+// client a réellement exprimés, les autres restent vides.
 type ChatAction struct {
-	Type string `json:"type"`
-	Page string `json:"page"`
+	Type   string `json:"type"`
+	Page   string `json:"page,omitempty"`
+	Ville  string `json:"ville,omitempty"`
+	Genre  string `json:"genre,omitempty"`
+	Forme  string `json:"forme,omitempty"`
+	Gamme  string `json:"gamme,omitempty"`
+	Taille string `json:"taille,omitempty"`
 }
 
 // rawChatResponse reflète le schéma renvoyé par POST /assistant/chat (app/api/chat.py).
