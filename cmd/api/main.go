@@ -134,6 +134,8 @@ func main() {
 	expeditionHandler := inventoryHandlers.NewExpeditionHandler(supplierOrderRepo)
 	demandBasketRepo := repositories.NewDemandBasketRepository(db)
 	demandBasketHandler := inventoryHandlers.NewDemandBasketHandler(demandBasketRepo)
+	sendListRepo := repositories.NewSendListRepository(db)
+	sendListHandler := inventoryHandlers.NewSendListHandler(sendListRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
@@ -347,6 +349,17 @@ func main() {
 				baskets.GET("", demandBasketHandler.List)
 				baskets.GET("/counts", demandBasketHandler.Counts)
 				baskets.POST("/sent", demandBasketHandler.MarkSent)
+			}
+
+			// Listes d'envoi. La création est réservée à la direction/admin ; la lecture et
+			// l'accusé de réception restent ouverts, c'est le poste de scan (MAGASINIER)
+			// qui les consulte pour préparer les colis.
+			sendLists := inventory.Group("/send-lists")
+			{
+				sendLists.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), sendListHandler.Create)
+				sendLists.GET("", sendListHandler.List)
+				sendLists.GET("/:id/items", sendListHandler.GetItems)
+				sendLists.POST("/seen", sendListHandler.MarkSeen)
 			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;
