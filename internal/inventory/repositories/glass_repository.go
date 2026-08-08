@@ -76,10 +76,11 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 		SELECT g.id, g.barcode, g.station_id, g.status, g.price,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
-			sl.code AS location_code
+			sl.code AS location_code,
+			lm.author AS last_action_by, lm.action AS last_action
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
-		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id` + lastMovementJoin + `
 		WHERE g.station_id = $1 AND g.status = ANY($2)
 		ORDER BY g.created_at DESC`
 	if err := r.db.Select(&items, query, stationID, pq.Array(statuses)); err != nil {
@@ -116,6 +117,20 @@ func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryIte
 	return items, nil
 }
 
+// lastMovementJoin rattache à chaque monture l'auteur et l'action de son dernier mouvement.
+// LEFT JOIN LATERAL et non une sous-requête corrélée par colonne : une seule lecture de
+// movements pour les deux champs, et une monture sans mouvement reste dans le résultat.
+const lastMovementJoin = `
+		LEFT JOIN LATERAL (
+			SELECT m.action,
+				NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), '') AS author
+			FROM movements m
+			LEFT JOIN users u ON u.id = m.user_id
+			WHERE m.glass_id = g.id
+			ORDER BY m.created_at DESC, m.id DESC
+			LIMIT 1
+		) lm ON TRUE`
+
 // FindByStatuses liste les montures filtrées par statut, toutes stations confondues.
 func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
@@ -123,11 +138,12 @@ func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListI
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
-			sl.code AS location_code
+			sl.code AS location_code,
+			lm.author AS last_action_by, lm.action AS last_action
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
-		LEFT JOIN stations s ON s.id = g.station_id
+		LEFT JOIN stations s ON s.id = g.station_id` + lastMovementJoin + `
 		WHERE g.status = ANY($1)
 		ORDER BY g.created_at DESC`
 	if err := r.db.Select(&items, query, pq.Array(statuses)); err != nil {
