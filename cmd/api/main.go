@@ -108,6 +108,9 @@ func main() {
 	aiSvc := services.NewAIService(aiServiceURL)
 	similaritySvc := services.NewSimilarityService(glassRepo)
 
+	// Initialiser les dépôts nécessaires
+	receptionCommandRepo := repositories.NewReceptionCommandRepository(db)
+
 	// Initialiser les workflows
 	receptionWorkflow := workflows.NewReceptionWorkflow(
 		allocationSvc,
@@ -120,11 +123,11 @@ func main() {
 		locationRepo,
 		analysisRepo,
 		shapeCorrectionRepo,
+		receptionCommandRepo,
 	)
 
 	// Initialiser les handlers
 	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
-	receptionCommandRepo := repositories.NewReceptionCommandRepository(db)
 	receptionCommandHandler := inventoryHandlers.NewReceptionCommandHandler(receptionCommandRepo)
 	supplierOrderRepo := repositories.NewSupplierOrderRepository(db)
 	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)

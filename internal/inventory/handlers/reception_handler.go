@@ -3,8 +3,10 @@ package handlers
 import (
 	"mime/multipart"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/lunetterie/backend/internal/inventory/dto"
 	"github.com/lunetterie/backend/internal/shared"
 	"github.com/lunetterie/backend/internal/workflows"
@@ -38,9 +40,14 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 
 	// Parser la requête multipart
 	var req dto.ReceptionRequest
-	if err := c.ShouldBind(&req); err != nil {
+	if err := c.ShouldBindWith(&req, binding.FormMultipart); err != nil {
 		shared.BadRequest(c, "Données invalides: "+err.Error())
 		return
+	}
+	if req.ReceptionCommandCode == nil {
+		if code := strings.TrimSpace(c.PostForm("reception_command_code")); code != "" {
+			req.ReceptionCommandCode = &code
+		}
 	}
 
 	// Récupérer la photo de la monture

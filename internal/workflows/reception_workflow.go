@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"mime/multipart"
+	"strings"
 
 	"github.com/lunetterie/backend/internal/inventory/dto"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -14,16 +15,17 @@ import (
 
 // ReceptionWorkflow orchestrate le workflow complet de réception
 type ReceptionWorkflow struct {
-	allocationService   *services.AllocationService
-	movementService     *services.MovementService
-	barcodeService      *services.BarcodeService
-	analysisService     *services.AnalysisService
-	storageService      *services.StorageService
-	similarityService   *services.SimilarityService
-	glassRepo           *repositories.GlassRepository
-	locationRepo        *repositories.LocationRepository
-	analysisRepo        *repositories.AnalysisRepository
-	shapeCorrectionRepo *repositories.ShapeCorrectionRepository
+	allocationService    *services.AllocationService
+	movementService      *services.MovementService
+	barcodeService       *services.BarcodeService
+	analysisService      *services.AnalysisService
+	storageService       *services.StorageService
+	similarityService    *services.SimilarityService
+	glassRepo            *repositories.GlassRepository
+	locationRepo         *repositories.LocationRepository
+	analysisRepo         *repositories.AnalysisRepository
+	shapeCorrectionRepo  *repositories.ShapeCorrectionRepository
+	receptionCommandRepo *repositories.ReceptionCommandRepository
 }
 
 // NewReceptionWorkflow crée une nouvelle instance
@@ -38,18 +40,20 @@ func NewReceptionWorkflow(
 	locationRepo *repositories.LocationRepository,
 	analysisRepo *repositories.AnalysisRepository,
 	shapeCorrectionRepo *repositories.ShapeCorrectionRepository,
+	receptionCommandRepo *repositories.ReceptionCommandRepository,
 ) *ReceptionWorkflow {
 	return &ReceptionWorkflow{
-		allocationService:   allocationSvc,
-		movementService:     movementSvc,
-		barcodeService:      barcodeSvc,
-		analysisService:     analysisSvc,
-		storageService:      storageSvc,
-		similarityService:   similaritySvc,
-		glassRepo:           glassRepo,
-		locationRepo:        locationRepo,
-		analysisRepo:        analysisRepo,
-		shapeCorrectionRepo: shapeCorrectionRepo,
+		allocationService:    allocationSvc,
+		movementService:      movementSvc,
+		barcodeService:       barcodeSvc,
+		analysisService:      analysisSvc,
+		storageService:       storageSvc,
+		similarityService:    similaritySvc,
+		glassRepo:            glassRepo,
+		locationRepo:         locationRepo,
+		analysisRepo:         analysisRepo,
+		shapeCorrectionRepo:  shapeCorrectionRepo,
+		receptionCommandRepo: receptionCommandRepo,
 	}
 }
 
@@ -135,18 +139,29 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	}
 	log.Printf("✅ Emplacement trouvé: %s", location.Code)
 
+	receptionCommandID, err := resolveReceptionCommandID(req, func(code string) (*models.ReceptionCommand, error) {
+		if w.receptionCommandRepo == nil {
+			return nil, nil
+		}
+		return w.receptionCommandRepo.GetByCode(code)
+	})
+	if err != nil {
+		log.Printf("⚠️  Erreur résolution session de réception: %v", err)
+	}
+
 	// Étape: Créer le glass
 	log.Println("💾 Création glass...")
 	glass := &models.Glass{
-		Barcode:         barcode,
-		StationID:       req.StationID,
-		LocationID:      &location.ID,
-		SupplierID:      req.SupplierID,
-		Status:          models.StatusEnStockGeneral,
-		Price:           req.Price,
-		PhotoMontureURL: photoMontureURL,
-		PhotoBrancheURL: photoBrancheURL,
-		Notes:           req.Notes,
+		Barcode:            barcode,
+		StationID:          req.StationID,
+		LocationID:         &location.ID,
+		SupplierID:         req.SupplierID,
+		Status:             models.StatusEnStockGeneral,
+		Price:              req.Price,
+		PhotoMontureURL:    photoMontureURL,
+		PhotoBrancheURL:    photoBrancheURL,
+		ReceptionCommandID: receptionCommandID,
+		Notes:              req.Notes,
 	}
 
 	if err := w.glassRepo.Create(glass); err != nil {
@@ -215,13 +230,14 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 	// Étape: Construire la réponse
 	response := &dto.ReceptionResponse{
-		GlassID:      glass.ID,
-		Barcode:      barcode,
-		Status:       string(glass.Status),
-		Location:     location.Code,
-		LocationCode: location.Code,
-		Price:        glass.Price,
-		Analysis:     analysisResult,
+		GlassID:            glass.ID,
+		Barcode:            barcode,
+		ReceptionCommandID: receptionCommandID,
+		Status:             string(glass.Status),
+		Location:           location.Code,
+		LocationCode:       location.Code,
+		Price:              glass.Price,
+		Analysis:           analysisResult,
 		Movement: &dto.MovementInfo{
 			ID:        movement.ID,
 			Action:    string(movement.Action),
@@ -236,6 +252,23 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 // buildAnalysisResult construit le résultat d'analyse final à partir des champs vérifiés/
 // corrigés par l'utilisateur à l'écran de vérification (issus au départ de POST /inventory/analyze).
+func resolveReceptionCommandID(req dto.ReceptionRequest, lookup func(string) (*models.ReceptionCommand, error)) (*int64, error) {
+	if req.ReceptionCommandID != nil {
+		return req.ReceptionCommandID, nil
+	}
+	if req.ReceptionCommandCode == nil || strings.TrimSpace(*req.ReceptionCommandCode) == "" {
+		return nil, nil
+	}
+	command, err := lookup(strings.TrimSpace(*req.ReceptionCommandCode))
+	if err != nil {
+		return nil, err
+	}
+	if command == nil || command.ID == 0 {
+		return nil, fmt.Errorf("commande de réception introuvable pour le code %q", strings.TrimSpace(*req.ReceptionCommandCode))
+	}
+	return &command.ID, nil
+}
+
 func buildAnalysisResult(req dto.ReceptionRequest) *dto.AnalysisResult {
 	result := &dto.AnalysisResult{
 		Shape:     "Non déterminé",

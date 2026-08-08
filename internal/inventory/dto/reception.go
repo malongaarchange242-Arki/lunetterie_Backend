@@ -4,12 +4,14 @@ import "strings"
 
 // ReceptionRequest représente la requête de réception d'une monture
 type ReceptionRequest struct {
-	SupplierID  *int64   `json:"supplier_id" form:"supplier_id"`
-	DeliveryRef *string  `json:"delivery_ref" form:"delivery_ref"`
-	StationID   int64    `json:"station_id" form:"station_id" binding:"required"`
-	Notes       *string  `json:"notes" form:"notes"`
-	Price       *float64 `json:"price" form:"price"`
-	Gamme       *string  `json:"gamme" form:"gamme"`
+	SupplierID           *int64   `json:"supplier_id" form:"supplier_id"`
+	DeliveryRef          *string  `json:"delivery_ref" form:"delivery_ref"`
+	StationID            int64    `json:"station_id" form:"station_id" binding:"required"`
+	Notes                *string  `json:"notes" form:"notes"`
+	Price                *float64 `json:"price" form:"price"`
+	Gamme                *string  `json:"gamme" form:"gamme"`
+	ReceptionCommandID   *int64   `json:"reception_command_id" form:"reception_command_id"`
+	ReceptionCommandCode *string  `json:"reception_command_code" form:"reception_command_code"`
 	// Champs saisis/corrigés manuellement (étape de vérification) : prioritaires sur l'analyse IA.
 	Reference *string `json:"reference" form:"reference"`
 	Brand     *string `json:"brand" form:"brand"`
@@ -39,14 +41,15 @@ func (r *ReceptionRequest) EffectiveBrand() *string {
 
 // ReceptionResponse représente la réponse après réception
 type ReceptionResponse struct {
-	GlassID      int64           `json:"glass_id"`
-	Barcode      string          `json:"barcode"`
-	Status       string          `json:"status"`
-	Location     string          `json:"location"`
-	LocationCode string          `json:"location_code"`
-	Price        *float64        `json:"price,omitempty"`
-	Analysis     *AnalysisResult `json:"analysis"`
-	Movement     *MovementInfo   `json:"movement"`
+	GlassID            int64           `json:"glass_id"`
+	Barcode            string          `json:"barcode"`
+	ReceptionCommandID *int64          `json:"reception_command_id,omitempty"`
+	Status             string          `json:"status"`
+	Location           string          `json:"location"`
+	LocationCode       string          `json:"location_code"`
+	Price              *float64        `json:"price,omitempty"`
+	Analysis           *AnalysisResult `json:"analysis"`
+	Movement           *MovementInfo   `json:"movement"`
 }
 
 // AnalysisResult représente les résultats d'analyse IA

@@ -4,24 +4,25 @@ import "time"
 
 // Glass représente une monture physique exemplaire
 type Glass struct {
-	ID               int64       `db:"id" json:"id"`
-	Barcode          string      `db:"barcode" json:"barcode"`
-	SerialNumber     *string     `db:"serial_number" json:"serial_number,omitempty"`
-	FrameModelID     *int64      `db:"frame_model_id" json:"frame_model_id,omitempty"`
-	StationID        int64       `db:"station_id" json:"station_id"`
-	LocationID       *int64      `db:"location_id" json:"location_id,omitempty"`
-	SupplierID       *int64      `db:"supplier_id" json:"supplier_id,omitempty"`
-	DeliveryID       *int64      `db:"delivery_id" json:"delivery_id,omitempty"`
-	AnalysisID       *int64      `db:"analysis_id" json:"analysis_id,omitempty"`
-	Status           GlassStatus `db:"status" json:"status"`
-	IsReserved       bool        `db:"is_reserved" json:"is_reserved"`
-	ReservedForOrder *int64      `db:"reserved_for_order" json:"reserved_for_order,omitempty"`
-	Price            *float64    `db:"price" json:"price,omitempty"`
-	PhotoMontureURL  *string     `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
-	PhotoBrancheURL  *string     `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
-	Notes            *string     `db:"notes" json:"notes,omitempty"`
-	CreatedAt        time.Time   `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time   `db:"updated_at" json:"updated_at"`
+	ID                 int64       `db:"id" json:"id"`
+	Barcode            string      `db:"barcode" json:"barcode"`
+	SerialNumber       *string     `db:"serial_number" json:"serial_number,omitempty"`
+	FrameModelID       *int64      `db:"frame_model_id" json:"frame_model_id,omitempty"`
+	StationID          int64       `db:"station_id" json:"station_id"`
+	LocationID         *int64      `db:"location_id" json:"location_id,omitempty"`
+	SupplierID         *int64      `db:"supplier_id" json:"supplier_id,omitempty"`
+	DeliveryID         *int64      `db:"delivery_id" json:"delivery_id,omitempty"`
+	AnalysisID         *int64      `db:"analysis_id" json:"analysis_id,omitempty"`
+	Status             GlassStatus `db:"status" json:"status"`
+	IsReserved         bool        `db:"is_reserved" json:"is_reserved"`
+	ReservedForOrder   *int64      `db:"reserved_for_order" json:"reserved_for_order,omitempty"`
+	Price              *float64    `db:"price" json:"price,omitempty"`
+	PhotoMontureURL    *string     `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
+	PhotoBrancheURL    *string     `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
+	ReceptionCommandID *int64      `db:"reception_command_id" json:"reception_command_id,omitempty"`
+	Notes              *string     `db:"notes" json:"notes,omitempty"`
+	CreatedAt          time.Time   `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time   `db:"updated_at" json:"updated_at"`
 }
 
 // GlassListItem représente une monture pour affichage en liste (jointure glasses + glass_analysis + storage_locations)
