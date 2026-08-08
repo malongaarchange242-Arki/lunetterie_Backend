@@ -198,6 +198,7 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		Email:     req.Email,
 		Phone:     stringPtr(req.Phone),
 		Gender:    stringPtr(req.Gender),
+		City:      stringPtr(req.City),
 		RoleID:    req.RoleID,
 		StationID: req.StationID,
 		IsActive:  true,
@@ -213,7 +214,7 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 	}
 
 	if err := h.userRepo.Create(user); err != nil {
-		shared.InternalError(c, "Impossible de créer l'utilisateur")
+		shared.InternalError(c, "Impossible de créer l'utilisateur: "+err.Error())
 		return
 	}
 
