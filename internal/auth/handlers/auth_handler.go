@@ -97,8 +97,14 @@ func (h *AuthHandler) RegisterFingerprintUser(c *gin.Context) {
 		return
 	}
 
+	createdUser, err := h.userRepo.FindByID(user.ID)
+	if err != nil {
+		shared.InternalError(c, "Impossible de récupérer l'utilisateur créé")
+		return
+	}
+
 	shared.Success(c, http.StatusCreated, gin.H{
-		"user": user,
+		"user": createdUser,
 	})
 }
 
@@ -205,7 +211,13 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	shared.Success(c, http.StatusCreated, gin.H{"user": user})
+	createdUser, err := h.userRepo.FindByID(user.ID)
+	if err != nil {
+		shared.InternalError(c, "Impossible de récupérer l'utilisateur créé")
+		return
+	}
+
+	shared.Success(c, http.StatusCreated, gin.H{"user": createdUser})
 }
 
 func (h *AuthHandler) LoginWithPassword(c *gin.Context) {
