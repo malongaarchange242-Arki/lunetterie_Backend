@@ -33,3 +33,4 @@ CREATE TABLE IF NOT EXISTS send_list_items (
 CREATE INDEX IF NOT EXISTS idx_send_lists_status_created ON send_lists(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_send_lists_city ON send_lists(city);
 CREATE INDEX IF NOT EXISTS idx_send_list_items_list ON send_list_items(list_id);
+

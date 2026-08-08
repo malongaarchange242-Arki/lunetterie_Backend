@@ -75,14 +75,19 @@ func (r *SendListRepository) List(status string) ([]models.SendList, error) {
 	return lists, nil
 }
 
-func (r *SendListRepository) ListItems(listID int64) ([]models.SendListItem, error) {
+func (r *SendListRepository) ListItems(listID int64, query string) ([]models.SendListItem, error) {
 	items := []models.SendListItem{}
-	query := `
+	baseQuery := `
         SELECT id, list_id, glass_id, barcode, reference, brand, location_code, created_at
         FROM send_list_items
-        WHERE list_id = $1
-        ORDER BY id`
-	if err := r.db.Select(&items, query, listID); err != nil {
+        WHERE list_id = $1`
+	args := []interface{}{listID}
+	if query != "" {
+		baseQuery += ` AND (LOWER(barcode) LIKE LOWER($2) OR LOWER(reference) LIKE LOWER($2))`
+		args = append(args, "%"+query+"%")
+	}
+	baseQuery += ` ORDER BY id`
+	if err := r.db.Select(&items, baseQuery, args...); err != nil {
 		return nil, fmt.Errorf("impossible de récupérer le contenu de la liste: %w", err)
 	}
 	return items, nil

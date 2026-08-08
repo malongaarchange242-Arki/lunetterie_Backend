@@ -14,7 +14,7 @@ import (
 type sendListRepository interface {
 	Create(list *models.SendList, items []models.SendListItemRequest) error
 	List(status string) ([]models.SendList, error)
-	ListItems(listID int64) ([]models.SendListItem, error)
+	ListItems(listID int64, query string) ([]models.SendListItem, error)
 	MarkSeen(ids []int64) (int64, error)
 }
 
@@ -88,8 +88,9 @@ func (h *SendListHandler) GetItems(c *gin.Context) {
 		shared.BadRequest(c, "ID de liste invalide")
 		return
 	}
+	query := strings.TrimSpace(c.Query("query"))
 
-	items, err := h.repo.ListItems(listID)
+	items, err := h.repo.ListItems(listID, query)
 	if err != nil {
 		shared.InternalError(c, err.Error())
 		return
