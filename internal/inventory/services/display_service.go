@@ -91,6 +91,9 @@ var placeableStatuses = map[models.GlassStatus]bool{
 	// nouveau poste vaut confirmation qu'elle a physiquement changé d'endroit.
 	models.StatusEnPresentoir:  true,
 	models.StatusEnLaboratoire: true,
+	// Une monture posée en caisse mais non encaissée (le client renonce) doit pouvoir
+	// retourner au présentoir par un simple scan là-bas.
+	models.StatusEnCaisse: true,
 }
 
 // PlaceOnDisplay est déclenché par la recherche d'un code-barres sur presentoir.html, quel que
@@ -125,7 +128,7 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 	if err != nil {
 		return "", err
 	}
-	if glass.StationID == stationID && (glass.Status == models.StatusEnPresentoir || glass.Status == models.StatusEnLaboratoire) {
+	if glass.StationID == stationID && (glass.Status == models.StatusEnPresentoir || glass.Status == models.StatusEnLaboratoire || glass.Status == models.StatusEnCaisse) {
 		return "", nil
 	}
 
@@ -134,20 +137,20 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 		if blocking {
 			return note, nil
 		}
-		// Le Présentoir et le Laboratoire n'ont pas de "stock local" distinct de l'exposition :
-		// l'arrivée y vaut mise en présentoir/labo directe, en une seule étape. Un magasin
+		// Le Présentoir, le Laboratoire et la Caisse n'ont pas de "stock local" distinct de
+		// l'exposition : l'arrivée y vaut placement direct, en une seule étape. Un magasin
 		// "station" (ex: Station Pointe-Noire) atterrit d'abord en stock local (deux étapes).
-		if s.isPresentoirStation(stationID) || s.isLaboratoireStation(stationID) {
+		if s.isDirectPlacementStation(stationID) {
 			return "", s.placeGlass(glass, stationID, userID)
 		}
 		return "", s.receiveIntoLocalStock(glass, stationID, userID)
 	}
 
-	// La mise en présentoir/labo automatique au scan ne s'applique qu'aux postes dédiés
-	// (Présentoir, Laboratoire). À un poste "station" (magasin, ex: Station Pointe-Noire),
+	// Le placement automatique au scan ne s'applique qu'aux postes dédiés (Présentoir,
+	// Laboratoire, Caisse). À un poste "station" (magasin, ex: Station Pointe-Noire),
 	// rechercher une monture déjà en stock local reste une simple consultation — le passage au
 	// présentoir se fait explicitement via le bouton "Envoyer" (transfert réel vers Présentoir).
-	if !s.isPresentoirStation(stationID) && !s.isLaboratoireStation(stationID) {
+	if !s.isDirectPlacementStation(stationID) {
 		return "", nil
 	}
 
@@ -199,9 +202,19 @@ func (s *DisplayService) receiveIntoLocalStock(glass *models.Glass, stationID, u
 // placeGlass assigne un emplacement présentoir (ou laboratoire) et bascule le statut en
 // conséquence (EN_PRESENTOIR, ou EN_LABORATOIRE si la station scannée est le Laboratoire).
 func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64) error {
-	location, err := s.allocation.FindOrCreatePresentoirLocation(stationID, glass.Barcode)
+	// La caisse n'expose rien : une monture au comptoir attend d'être payée. Elle occupe un
+	// emplacement de stock, pas un casier de présentoir qu'elle bloquerait pour rien.
+	isCaisse := s.isCaisseStation(stationID)
+
+	var location *models.StorageLocation
+	var err error
+	if isCaisse {
+		location, err = s.allocation.FindOrCreateStockLocation(stationID)
+	} else {
+		location, err = s.allocation.FindOrCreatePresentoirLocation(stationID, glass.Barcode)
+	}
 	if err != nil {
-		log.Printf("⚠️  Impossible d'assigner un emplacement présentoir pour la monture #%d: %v", glass.ID, err)
+		log.Printf("⚠️  Impossible d'assigner un emplacement pour la monture #%d: %v", glass.ID, err)
 		return nil
 	}
 
@@ -218,9 +231,13 @@ func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64
 
 	status := models.StatusEnPresentoir
 	action := models.ActionMiseEnPresentoir
-	if s.isLaboratoireStation(stationID) {
+	switch {
+	case s.isLaboratoireStation(stationID):
 		status = models.StatusEnLaboratoire
 		action = models.ActionEnvoiLaboratoire
+	case isCaisse:
+		status = models.StatusEnCaisse
+		action = models.ActionMiseEnCaisse
 	}
 
 	if err := s.glassRepo.UpdateStatus(glass.ID, status); err != nil {
@@ -300,6 +317,17 @@ func (s *DisplayService) isLaboratoireStation(stationID int64) bool {
 
 func (s *DisplayService) isPresentoirStation(stationID int64) bool {
 	return s.stationNameEquals(stationID, "Présentoir")
+}
+
+func (s *DisplayService) isCaisseStation(stationID int64) bool {
+	return s.stationNameEquals(stationID, "Caisse")
+}
+
+// isDirectPlacementStation : postes où l'arrivée d'une monture vaut placement immédiat, sans
+// étape de stock local. Le client apporte sa monture au comptoir comme on la pose au
+// présentoir — le scan constate le geste, il ne l'annonce pas.
+func (s *DisplayService) isDirectPlacementStation(stationID int64) bool {
+	return s.isPresentoirStation(stationID) || s.isLaboratoireStation(stationID) || s.isCaisseStation(stationID)
 }
 
 func (s *DisplayService) stationNameEquals(stationID int64, name string) bool {

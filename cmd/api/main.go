@@ -141,6 +141,7 @@ func main() {
 	sendListRepo := repositories.NewSendListRepository(db)
 	sendListDispatchSvc := services.NewSendListDispatchService(sendListRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	sendListHandler := inventoryHandlers.NewSendListHandler(sendListRepo, sendListDispatchSvc)
+	sendBoxHandler := inventoryHandlers.NewSendBoxHandler(sendListRepo, stationRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
@@ -370,6 +371,16 @@ func main() {
 				// montures et clôt la liste. Même ouverture que /processed, c'est le magasinier
 				// qui déclenche l'envoi une fois toutes les montures vérifiées.
 				sendLists.POST("/dispatch", sendListHandler.Dispatch)
+			}
+
+			// Cartons expédiés. Le poste de magasin demande à son ouverture s'il attend un
+			// colis, puis scanne l'étiquette pour démarrer la session de réception. Ouvert à
+			// tout compte authentifié : la station est vérifiée côté serveur, un poste ne peut
+			// ouvrir que les cartons destinés à sa propre ville.
+			sendBoxes := inventory.Group("/send-boxes")
+			{
+				sendBoxes.GET("/pending", sendBoxHandler.Pending)
+				sendBoxes.POST("/open", sendBoxHandler.Open)
 			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;

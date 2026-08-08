@@ -84,6 +84,77 @@ func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []mo
 	return box, nil
 }
 
+const sendBoxColumns = `id, list_id, code, reference, city, session_code, item_count, status,
+        created_by, opened_at, opened_by, opened_station_id, created_at, updated_at`
+
+// FindPendingBoxesByCity liste les cartons partis vers une ville et pas encore ouverts. Le
+// poste de magasin s'en sert pour savoir s'il doit réclamer un code-barres avant de travailler.
+// Le plus ancien d'abord : un colis en attente depuis trois jours passe avant celui d'hier.
+func (r *SendListRepository) FindPendingBoxesByCity(city string) ([]models.SendBox, error) {
+	boxes := []models.SendBox{}
+	query := `SELECT ` + sendBoxColumns + `
+        FROM send_boxes
+        WHERE status = $1
+          AND LOWER(TRIM(city)) = LOWER(TRIM($2))
+        ORDER BY created_at ASC`
+	if err := r.db.Select(&boxes, query, models.SendBoxStatusCreated, city); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les cartons en attente pour %q: %w", city, err)
+	}
+	return boxes, nil
+}
+
+// FindBoxByCode retrouve un carton par le code imprimé sur son étiquette. La comparaison
+// ignore la casse et les espaces : une douchette peut ajouter un blanc en fin de trame.
+func (r *SendListRepository) FindBoxByCode(code string) (*models.SendBox, error) {
+	var box models.SendBox
+	query := `SELECT ` + sendBoxColumns + `
+        FROM send_boxes
+        WHERE UPPER(TRIM(code)) = UPPER(TRIM($1))
+           OR UPPER(TRIM(reference)) = UPPER(TRIM($1))`
+	if err := r.db.Get(&box, query, code); err != nil {
+		return nil, fmt.Errorf("carton introuvable pour le code %q: %w", code, err)
+	}
+	return &box, nil
+}
+
+// FindBoxItems renvoie le contenu annoncé du carton, tel que figé au départ.
+func (r *SendListRepository) FindBoxItems(boxID int64) ([]models.SendBoxItem, error) {
+	items := []models.SendBoxItem{}
+	query := `SELECT id, box_id, list_item_id, glass_id, barcode, reference, location_code, created_at
+        FROM send_box_items
+        WHERE box_id = $1
+        ORDER BY id ASC`
+	if err := r.db.Select(&items, query, boxID); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer le contenu du carton %d: %w", boxID, err)
+	}
+	return items, nil
+}
+
+// MarkBoxOpened clôt l'attente d'un carton. La condition sur le statut rend l'appel idempotent
+// et évite qu'un second scan écrase l'identité du premier réceptionnaire : zéro ligne touchée
+// signale à l'appelant que le carton était déjà ouvert.
+func (r *SendListRepository) MarkBoxOpened(boxID, userID, stationID int64) (int64, error) {
+	query := `UPDATE send_boxes
+        SET status = $1, opened_at = NOW(), opened_by = $2, opened_station_id = $3, updated_at = NOW()
+        WHERE id = $4 AND status <> $1`
+	result, err := r.db.Exec(query, models.SendBoxStatusOpened, nullIfZero(userID), nullIfZero(stationID), boxID)
+	if err != nil {
+		return 0, fmt.Errorf("impossible d'ouvrir le carton %d: %w", boxID, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("impossible de lire le résultat d'ouverture du carton %d: %w", boxID, err)
+	}
+	return affected, nil
+}
+
+func nullIfZero(value int64) interface{} {
+	if value == 0 {
+		return nil
+	}
+	return value
+}
+
 func nullIfEmptyFromString(value *string) interface{} {
 	if value == nil || strings.TrimSpace(*value) == "" {
 		return nil

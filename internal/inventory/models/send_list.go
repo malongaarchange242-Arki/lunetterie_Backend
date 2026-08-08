@@ -44,19 +44,29 @@ type SendListCreateRequest struct {
 	Items       []SendListItemRequest `json:"items"`
 }
 
+// Statuts d'un carton : créé au départ du stock général, ouvert quand le magasin a scanné
+// son code-barres à l'arrivée.
+const (
+	SendBoxStatusCreated = "CREATED"
+	SendBoxStatusOpened  = "OPENED"
+)
+
 // SendBox represents a physical carton shipped for one full send-list dispatch.
 type SendBox struct {
-	ID          int64     `db:"id" json:"id"`
-	ListID      int64     `db:"list_id" json:"list_id"`
-	Code        string    `db:"code" json:"code"`
-	Reference   string    `db:"reference" json:"reference"`
-	City        string    `db:"city" json:"city"`
-	SessionCode string    `db:"session_code" json:"session_code"`
-	ItemCount   int       `db:"item_count" json:"item_count"`
-	Status      string    `db:"status" json:"status"`
-	CreatedBy   *int64    `db:"created_by" json:"created_by,omitempty"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
+	ID              int64      `db:"id" json:"id"`
+	ListID          int64      `db:"list_id" json:"list_id"`
+	Code            string     `db:"code" json:"code"`
+	Reference       string     `db:"reference" json:"reference"`
+	City            string     `db:"city" json:"city"`
+	SessionCode     string     `db:"session_code" json:"session_code"`
+	ItemCount       int        `db:"item_count" json:"item_count"`
+	Status          string     `db:"status" json:"status"`
+	CreatedBy       *int64     `db:"created_by" json:"created_by,omitempty"`
+	OpenedAt        *time.Time `db:"opened_at" json:"opened_at,omitempty"`
+	OpenedBy        *int64     `db:"opened_by" json:"opened_by,omitempty"`
+	OpenedStationID *int64     `db:"opened_station_id" json:"opened_station_id,omitempty"`
+	CreatedAt       time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 // SendBoxItem stores each send-list snapshot line that is attached to a box.
