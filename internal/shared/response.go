@@ -30,6 +30,16 @@ func BadRequest(c *gin.Context, message string) {
 	})
 }
 
+// BadRequestWithData retourne une erreur 400 en conservant un corps de données : utile quand
+// l'échec porte sur un lot et que le détail par élément explique le refus.
+func BadRequestWithData(c *gin.Context, message string, data interface{}) {
+	c.JSON(http.StatusBadRequest, APIResponse{
+		Success: false,
+		Data:    data,
+		Error:   &message,
+	})
+}
+
 // Unauthorized retourne une erreur 401
 func Unauthorized(c *gin.Context, message string) {
 	c.JSON(http.StatusUnauthorized, APIResponse{

@@ -17,11 +17,12 @@ type DisplayService struct {
 	allocation   *AllocationService
 	stationRepo  *authRepositories.StationRepository
 	transferRepo *repositories.TransferRepository
+	userRepo     *authRepositories.UserRepository
 }
 
 // NewDisplayService crée une nouvelle instance
-func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService, stationRepo *authRepositories.StationRepository, transferRepo *repositories.TransferRepository) *DisplayService {
-	return &DisplayService{glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation, stationRepo: stationRepo, transferRepo: transferRepo}
+func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService, stationRepo *authRepositories.StationRepository, transferRepo *repositories.TransferRepository, userRepo *authRepositories.UserRepository) *DisplayService {
+	return &DisplayService{glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation, stationRepo: stationRepo, transferRepo: transferRepo, userRepo: userRepo}
 }
 
 // RelocateGlass attribue un nouvel emplacement libre à une monture, dans la même zone de la
@@ -128,7 +129,16 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 	if err != nil {
 		return "", err
 	}
-	if glass.StationID == stationID && (glass.Status == models.StatusEnPresentoir || glass.Status == models.StatusEnLaboratoire || glass.Status == models.StatusEnCaisse) {
+	caisse := s.isCaissePoste(stationID, userID)
+
+	// Rien à faire quand la monture est déjà posée là où elle doit être. Pour un caissier, le
+	// bon état c'est EN_CAISSE seul : une monture encore EN_PRESENTOIR qu'il scanne, c'est
+	// justement le client qui l'apporte au comptoir — elle doit basculer, pas être ignorée.
+	settled := glass.Status == models.StatusEnPresentoir || glass.Status == models.StatusEnLaboratoire || glass.Status == models.StatusEnCaisse
+	if caisse {
+		settled = glass.Status == models.StatusEnCaisse
+	}
+	if glass.StationID == stationID && settled {
 		return "", nil
 	}
 
@@ -140,8 +150,8 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 		// Le Présentoir, le Laboratoire et la Caisse n'ont pas de "stock local" distinct de
 		// l'exposition : l'arrivée y vaut placement direct, en une seule étape. Un magasin
 		// "station" (ex: Station Pointe-Noire) atterrit d'abord en stock local (deux étapes).
-		if s.isDirectPlacementStation(stationID) {
-			return "", s.placeGlass(glass, stationID, userID)
+		if s.isDirectPlacementStation(stationID) || caisse {
+			return "", s.placeGlass(glass, stationID, userID, caisse)
 		}
 		return "", s.receiveIntoLocalStock(glass, stationID, userID)
 	}
@@ -150,14 +160,76 @@ func (s *DisplayService) PlaceOnDisplay(barcode string, stationID, userID int64)
 	// Laboratoire, Caisse). À un poste "station" (magasin, ex: Station Pointe-Noire),
 	// rechercher une monture déjà en stock local reste une simple consultation — le passage au
 	// présentoir se fait explicitement via le bouton "Envoyer" (transfert réel vers Présentoir).
-	if !s.isDirectPlacementStation(stationID) {
+	if !s.isDirectPlacementStation(stationID) && !caisse {
 		return "", nil
 	}
 
 	if !placeableStatuses[glass.Status] {
 		return fmt.Sprintf("Statut actuel « %s » : cette monture ne peut pas être placée sur le présentoir depuis ce statut.", glass.Status), nil
 	}
-	return "", s.placeGlass(glass, stationID, userID)
+	return "", s.placeGlass(glass, stationID, userID, caisse)
+}
+
+// SkippedBarcode explique pourquoi une monture sélectionnée n'a pas suivi le mouvement.
+type SkippedBarcode struct {
+	Barcode string `json:"barcode"`
+	Reason  string `json:"reason"`
+}
+
+// SendToCaisse fait passer les montures sélectionnées du présentoir au comptoir
+// d'encaissement (EN_PRESENTOIR -> EN_CAISSE). Déclenché par le bouton « Envoyer » du poste
+// Présentoir, là où le vendeur pose physiquement la monture sur le comptoir.
+//
+// La monture ne change PAS de station : le caissier tient le comptoir du magasin et sa liste
+// est filtrée sur son propre station_id (stockListStatus() dans presentoir.js). Passer par un
+// transfert inter-stations la ferait transiter par EN_TRANSIT et exigerait un second scan au
+// comptoir — deux gestes pour un seul mouvement réel. Seul l'emplacement change : le casier de
+// présentoir est libéré (il redevient à regarnir) au profit d'un emplacement de stock, comme
+// quand le caissier scanne lui-même la monture.
+//
+// Le lot n'est pas atomique : chaque monture est traitée pour elle-même et les refus sont
+// renvoyés avec leur raison, plutôt que de faire échouer l'envoi entier pour une monture déjà
+// partie. L'erreur n'est renvoyée que si RIEN n'a pu être envoyé.
+func (s *DisplayService) SendToCaisse(stationID int64, barcodes []string, userID int64) ([]string, []SkippedBarcode, error) {
+	if len(barcodes) == 0 {
+		return nil, nil, fmt.Errorf("aucune monture sélectionnée")
+	}
+
+	sent := make([]string, 0, len(barcodes))
+	skipped := make([]SkippedBarcode, 0)
+
+	for _, barcode := range barcodes {
+		glass, err := s.glassRepo.GetByBarcode(barcode)
+		if err != nil {
+			skipped = append(skipped, SkippedBarcode{Barcode: barcode, Reason: "monture introuvable"})
+			continue
+		}
+		// Déjà au comptoir : le vendeur a cliqué deux fois, ou le caissier l'a scannée entre
+		// temps. Rien à faire, et surtout pas une erreur.
+		if glass.Status == models.StatusEnCaisse {
+			skipped = append(skipped, SkippedBarcode{Barcode: barcode, Reason: "déjà en caisse"})
+			continue
+		}
+		if glass.Status != models.StatusEnPresentoir {
+			skipped = append(skipped, SkippedBarcode{Barcode: barcode, Reason: fmt.Sprintf("statut « %s » : seule une monture en présentoir part en caisse", glass.Status)})
+			continue
+		}
+		if glass.StationID != stationID {
+			skipped = append(skipped, SkippedBarcode{Barcode: barcode, Reason: fmt.Sprintf("exposée à %s, pas à ce poste", s.stationDisplayName(glass.StationID))})
+			continue
+		}
+
+		if err := s.placeGlass(glass, stationID, userID, true); err != nil {
+			skipped = append(skipped, SkippedBarcode{Barcode: barcode, Reason: err.Error()})
+			continue
+		}
+		sent = append(sent, barcode)
+	}
+
+	if len(sent) == 0 {
+		return sent, skipped, fmt.Errorf("aucune monture n'a pu être envoyée en caisse")
+	}
+	return sent, skipped, nil
 }
 
 // receiveIntoLocalStock fait atterrir une monture reçue par transfert dans le stock local de la
@@ -201,11 +273,9 @@ func (s *DisplayService) receiveIntoLocalStock(glass *models.Glass, stationID, u
 
 // placeGlass assigne un emplacement présentoir (ou laboratoire) et bascule le statut en
 // conséquence (EN_PRESENTOIR, ou EN_LABORATOIRE si la station scannée est le Laboratoire).
-func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64) error {
+func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64, isCaisse bool) error {
 	// La caisse n'expose rien : une monture au comptoir attend d'être payée. Elle occupe un
 	// emplacement de stock, pas un casier de présentoir qu'elle bloquerait pour rien.
-	isCaisse := s.isCaisseStation(stationID)
-
 	var location *models.StorageLocation
 	var err error
 	if isCaisse {
@@ -214,8 +284,10 @@ func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64
 		location, err = s.allocation.FindOrCreatePresentoirLocation(stationID, glass.Barcode)
 	}
 	if err != nil {
+		// Remonté en erreur, pas avalé : SendToCaisse répond à un clic sur « Envoyer » et
+		// annoncerait la monture partie en caisse alors que rien n'a bougé.
 		log.Printf("⚠️  Impossible d'assigner un emplacement pour la monture #%d: %v", glass.ID, err)
-		return nil
+		return fmt.Errorf("aucun emplacement disponible pour la monture %s", glass.Barcode)
 	}
 
 	oldStationID := glass.StationID
@@ -232,12 +304,13 @@ func (s *DisplayService) placeGlass(glass *models.Glass, stationID, userID int64
 	status := models.StatusEnPresentoir
 	action := models.ActionMiseEnPresentoir
 	switch {
-	case s.isLaboratoireStation(stationID):
-		status = models.StatusEnLaboratoire
-		action = models.ActionEnvoiLaboratoire
+	// Le rôle prime sur la station : un caissier qui scanne met en caisse, où qu'il soit.
 	case isCaisse:
 		status = models.StatusEnCaisse
 		action = models.ActionMiseEnCaisse
+	case s.isLaboratoireStation(stationID):
+		status = models.StatusEnLaboratoire
+		action = models.ActionEnvoiLaboratoire
 	}
 
 	if err := s.glassRepo.UpdateStatus(glass.ID, status); err != nil {
@@ -321,6 +394,28 @@ func (s *DisplayService) isPresentoirStation(stationID int64) bool {
 
 func (s *DisplayService) isCaisseStation(stationID int64) bool {
 	return s.stationNameEquals(stationID, "Caisse")
+}
+
+// isCaissePoste : le poste Caisse se reconnaît d'abord au RÔLE de celui qui scanne, pas à la
+// station. Le caissier tient le comptoir d'un magasin existant (station Présentoir) : côté
+// station rien ne le distingue d'un vendeur, seul son rôle dit que son scan vaut mise en
+// caisse. La station « Caisse » reste reconnue pour une installation qui lui dédierait un poste.
+func (s *DisplayService) isCaissePoste(stationID, userID int64) bool {
+	return s.isCaisseStation(stationID) || s.userHasRole(userID, "CAISSIER")
+}
+
+func (s *DisplayService) userHasRole(userID int64, role string) bool {
+	if s.userRepo == nil {
+		return false
+	}
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		// Sans rôle lisible on retombe sur le comportement historique (mise en présentoir)
+		// plutôt que d'échouer : le scan doit rester utilisable.
+		log.Printf("⚠️  Rôle introuvable pour l'utilisateur #%d, scan traité comme non-caisse: %v", userID, err)
+		return false
+	}
+	return strings.EqualFold(user.RoleName, role)
 }
 
 // isDirectPlacementStation : postes où l'arrivée d'une monture vaut placement immédiat, sans

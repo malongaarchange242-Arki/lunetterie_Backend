@@ -39,9 +39,14 @@ func (r *LocationRepository) UpdateStatus(locationID int64, status string) error
 }
 
 // FindEmptyPresentoirSlotsToday liste les emplacements de la zone PRESENTOIR d'une station qui
-// sont actuellement libres ET ont été libérés aujourd'hui suite à une vente ou une réserve (pas
-// un simple emplacement jamais utilisé), avec la monture qui les occupait — pour savoir quels
-// emplacements physiques remplir en fin de journée, et avec quoi.
+// sont actuellement libres ET ont été libérés aujourd'hui suite à une vente, une réserve ou un
+// envoi en caisse (pas un simple emplacement jamais utilisé), avec la monture qui les occupait
+// — pour savoir quels emplacements physiques remplir en fin de journée, et avec quoi.
+//
+// MISE_EN_CAISSE compte : depuis que « Envoyer » pousse la monture au comptoir, c'est ce
+// mouvement-là qui vide le casier, pas la vente qui vient après. Une monture que le client
+// refuse et qu'on repose au présentoir réoccupe son emplacement, donc le filtre sur
+// status = 'LIBRE' la fait ressortir d'elle-même de la liste.
 func (r *LocationRepository) FindEmptyPresentoirSlotsToday(stationID int64) ([]models.EmptySlot, error) {
 	slots := []models.EmptySlot{}
 	// DISTINCT ON (sl.id) + ORDER BY m.created_at DESC : si un emplacement a été libéré plusieurs
@@ -58,7 +63,7 @@ func (r *LocationRepository) FindEmptyPresentoirSlotsToday(stationID int64) ([]m
 			WHERE sl.station_id = $1
 			  AND sl.zone = 'PRESENTOIR'
 			  AND sl.status = 'LIBRE'
-			  AND m.action IN ('RETRAIT_PRESENTOIR', 'RESERVATION')
+			  AND m.action IN ('RETRAIT_PRESENTOIR', 'RESERVATION', 'MISE_EN_CAISSE')
 			  AND m.created_at::date = CURRENT_DATE
 			ORDER BY sl.id, m.created_at DESC
 		) latest

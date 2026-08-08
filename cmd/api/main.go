@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -40,6 +41,34 @@ func findFrontendDir() string {
 	}
 
 	return "../Frontend"
+}
+
+// startExpiredReservesSweeper rend au présentoir les montures mises de côté depuis trop
+// longtemps. Un passage par heure suffit pour un délai qui se compte en jours ; le premier a
+// lieu au démarrage, sinon un service redémarré chaque jour repousserait sans cesse la
+// première échéance.
+//
+// Le balayage est idempotent : une monture déjà repassée EN_PRESENTOIR ne ressort plus de la
+// requête. Deux instances de l'API peuvent donc tourner en parallèle — au pire elles se
+// disputent le même emplacement, et la perdante réessaie à l'heure suivante.
+func startExpiredReservesSweeper(reserveSvc *services.ReserveService) {
+	sweep := func() {
+		released, err := reserveSvc.ReleaseExpiredReserves()
+		if err != nil {
+			log.Printf("⚠️  Balayage des réservations expirées impossible: %v", err)
+			return
+		}
+		if released > 0 {
+			log.Printf("♻️  %d monture(s) réservée(s) depuis plus de %d jours remise(s) au présentoir", released, services.ReserveExpiryDays)
+		}
+	}
+
+	go func() {
+		sweep()
+		for range time.Tick(time.Hour) {
+			sweep()
+		}
+	}()
 }
 
 func main() {
@@ -107,10 +136,12 @@ func main() {
 	reserveRepo := repositories.NewReserveRepository(db)
 	saleSvc := services.NewSaleService(saleRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	reserveSvc := services.NewReserveService(reserveRepo, glassRepo, movementRepo, allocationSvc)
-	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo)
+	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo, userRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
 	similaritySvc := services.NewSimilarityService(glassRepo)
+
+	startExpiredReservesSweeper(reserveSvc)
 
 	// Initialiser les dépôts nécessaires
 	receptionCommandRepo := repositories.NewReceptionCommandRepository(db)
@@ -150,7 +181,7 @@ func main() {
 	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo)
 	saleHandler := inventoryHandlers.NewSaleHandler(saleSvc)
 	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc)
-	presentoirHandler := inventoryHandlers.NewPresentoirHandler(locationRepo)
+	presentoirHandler := inventoryHandlers.NewPresentoirHandler(locationRepo, displaySvc)
 	movementHandler := inventoryHandlers.NewMovementHandler(movementRepo)
 	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
@@ -442,6 +473,9 @@ func main() {
 			presentoir := inventory.Group("/presentoir")
 			{
 				presentoir.GET("/empty-slots", presentoirHandler.EmptySlotsToday)
+				// POST /api/v1/inventory/presentoir/send-to-caisse
+				// body: { station_id, barcodes: [...] }
+				presentoir.POST("/send-to-caisse", presentoirHandler.SendToCaisse)
 			}
 			inventory.GET("/movements", movementHandler.ListMovements)
 		}

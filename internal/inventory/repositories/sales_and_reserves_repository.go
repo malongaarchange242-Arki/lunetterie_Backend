@@ -77,6 +77,35 @@ func (r *ReserveRepository) Create(reserve *models.Reserve) error {
 	return fmt.Errorf("aucun ID retourné après création reserve")
 }
 
+// FindExpired liste les montures encore réservées dont la mise de côté remonte à plus de
+// `days` jours. La date de référence est celle de la réservation, jamais celle de la monture.
+//
+// LATERAL et non un simple JOIN : une monture peut avoir été réservée plusieurs fois (client
+// qui renonce, puis un autre qui réserve). Seule la dernière réservation fait courir le délai —
+// un JOIN plat ferait ressortir la monture sur sa plus vieille réservation et la renverrait au
+// présentoir alors qu'elle vient d'être remise de côté.
+func (r *ReserveRepository) FindExpired(days int) ([]models.ExpiredReserve, error) {
+	items := []models.ExpiredReserve{}
+	query := `
+        SELECT g.id AS glass_id, g.barcode, g.station_id, g.location_id,
+               last_reserve.user_id, last_reserve.created_at AS reserved_at
+        FROM glasses g
+        JOIN LATERAL (
+            SELECT res.user_id, res.created_at
+            FROM reserve_items ri
+            JOIN reserves res ON res.id = ri.reserve_id
+            WHERE ri.glass_id = g.id
+            ORDER BY res.created_at DESC
+            LIMIT 1
+        ) last_reserve ON TRUE
+        WHERE g.status = $1
+          AND last_reserve.created_at < NOW() - make_interval(days => $2::int)`
+	if err := r.db.Select(&items, query, models.StatusReservee, days); err != nil {
+		return nil, fmt.Errorf("impossible de lister les réservations expirées: %w", err)
+	}
+	return items, nil
+}
+
 func (r *ReserveRepository) AddItem(item *models.ReserveItem) error {
 	query := `
         INSERT INTO reserve_items (reserve_id, glass_id)

@@ -118,6 +118,77 @@ func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int6
 	return sale, nil
 }
 
+// ReserveExpiryDays : au-delà de ce délai, une monture mise de côté repart au présentoir.
+// Une réserve n'est pas une vente — passé dix jours sans que le client revienne, la monture
+// doit se revendre plutôt que rester immobilisée dans un tiroir.
+const ReserveExpiryDays = 10
+
+// ReleaseExpiredReserves rend au présentoir toutes les réservations dépassées. Renvoie le
+// nombre de montures effectivement libérées.
+//
+// Chaque monture est traitée isolément : une qui échoue (plus d'emplacement libre au
+// présentoir, par exemple) ne doit pas empêcher les suivantes de repartir. L'erreur est
+// journalisée, la boucle continue, et la monture sera reprise au prochain passage puisqu'elle
+// reste RESERVEE.
+func (s *ReserveService) ReleaseExpiredReserves() (int, error) {
+	expired, err := s.reserveRepo.FindExpired(ReserveExpiryDays)
+	if err != nil {
+		return 0, err
+	}
+
+	released := 0
+	for _, item := range expired {
+		if err := s.returnToDisplay(item); err != nil {
+			log.Printf("⚠️  Réservation du %s non levée pour la monture #%d (%s): %v",
+				item.ReservedAt.Format("2006-01-02"), item.GlassID, item.Barcode, err)
+			continue
+		}
+		released++
+	}
+	return released, nil
+}
+
+// returnToDisplay repose une monture réservée sur le présentoir de sa propre station : elle
+// n'a pas bougé physiquement pendant la réserve, elle retourne là où elle était exposée.
+func (s *ReserveService) returnToDisplay(item models.ExpiredReserve) error {
+	location, err := s.allocation.FindOrCreatePresentoirLocation(item.StationID, item.Barcode)
+	if err != nil {
+		return err
+	}
+
+	// L'emplacement avant le statut : une monture annoncée EN_PRESENTOIR sans casier serait
+	// cherchée en rayon sans y être. Si l'attribution échoue, on rend l'emplacement réservé
+	// et la monture reste RESERVEE — un état cohérent, retenté au prochain passage.
+	if err := s.glassRepo.UpdateLocation(item.GlassID, location.ID); err != nil {
+		if freeErr := s.allocation.FreeLocation(location.ID); freeErr != nil {
+			log.Printf("⚠️  Emplacement #%d réservé mais non attribué et non libéré: %v", location.ID, freeErr)
+		}
+		return err
+	}
+	if err := s.glassRepo.UpdateStatus(item.GlassID, models.StatusEnPresentoir); err != nil {
+		return err
+	}
+	// Le drapeau suit le statut : le laisser à true garderait la monture marquée réservée
+	// partout où ce champ est lu.
+	if err := s.glassRepo.UpdateReservedState(item.GlassID, false); err != nil {
+		log.Printf("⚠️  Drapeau de réservation non levé pour la monture #%d: %v", item.GlassID, err)
+	}
+
+	movement := &models.Movement{
+		GlassID:        item.GlassID,
+		FromStationID:  &item.StationID,
+		ToStationID:    &item.StationID,
+		FromLocationID: item.LocationID,
+		ToLocationID:   &location.ID,
+		Action:         models.ActionMiseEnPresentoir,
+		UserID:         item.UserID,
+	}
+	if err := s.movementRepo.Create(movement); err != nil {
+		log.Printf("⚠️  Erreur création mouvement retour présentoir (glass #%d): %v", item.GlassID, err)
+	}
+	return nil
+}
+
 func (s *ReserveService) CreateReserve(stationID int64, barcodes []string, userID int64) (*models.Reserve, error) {
 	if len(barcodes) == 0 {
 		return nil, fmt.Errorf("aucune monture sélectionnée")

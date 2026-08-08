@@ -29,3 +29,15 @@ type ReserveItem struct {
 	ReserveID int64 `db:"reserve_id" json:"reserve_id"`
 	GlassID   int64 `db:"glass_id" json:"glass_id"`
 }
+
+// ExpiredReserve : une monture encore RESERVEE dont la mise de côté a dépassé le délai.
+// UserID est celui qui avait posé la réservation : une tâche automatique n'a pas
+// d'utilisateur courant, et un mouvement sans auteur est refusé par la base.
+type ExpiredReserve struct {
+	GlassID    int64     `db:"glass_id"`
+	Barcode    string    `db:"barcode"`
+	StationID  int64     `db:"station_id"`
+	LocationID *int64    `db:"location_id"`
+	UserID     int64     `db:"user_id"`
+	ReservedAt time.Time `db:"reserved_at"`
+}
