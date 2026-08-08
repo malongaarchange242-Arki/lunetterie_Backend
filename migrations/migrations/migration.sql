@@ -129,3 +129,8 @@ VALUES
         WHERE nom = 'Station locale Kinshasa')
 )
 ON CONFLICT DO NOTHING;
+
+ALTER TABLE glasses
+ADD COLUMN IF NOT EXISTS reception_command_id BIGINT NULL REFERENCES reception_commands(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_glasses_reception_command_id ON glasses(reception_command_id);

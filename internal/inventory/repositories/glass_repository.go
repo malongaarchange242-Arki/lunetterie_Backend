@@ -120,7 +120,7 @@ func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryIte
 func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
 	query := `
-		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
@@ -132,6 +132,25 @@ func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListI
 		ORDER BY g.created_at DESC`
 	if err := r.db.Select(&items, query, pq.Array(statuses)); err != nil {
 		return nil, fmt.Errorf("impossible de récupérer les montures: %w", err)
+	}
+	return items, nil
+}
+
+func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.GlassListItem, error) {
+	items := []models.GlassListItem{}
+	query := `
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
+			g.photo_monture_url, g.photo_branche_url,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			sl.code AS location_code
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN storage_locations sl ON sl.id = g.location_id
+		LEFT JOIN stations s ON s.id = g.station_id
+		WHERE g.reception_command_id = $1
+		ORDER BY g.created_at DESC`
+	if err := r.db.Select(&items, query, commandID); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures de la session: %w", err)
 	}
 	return items, nil
 }

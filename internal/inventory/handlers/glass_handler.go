@@ -35,7 +35,14 @@ func (h *GlassHandler) ListGlasses(c *gin.Context) {
 
 	var glasses interface{}
 	var err error
-	if raw := c.Query("station_id"); raw != "" {
+	if raw := c.Query("reception_command_id"); raw != "" {
+		commandID, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil {
+			shared.BadRequest(c, "reception_command_id invalide")
+			return
+		}
+		glasses, err = h.repo.FindByReceptionCommand(commandID)
+	} else if raw := c.Query("station_id"); raw != "" {
 		stationID, parseErr := strconv.ParseInt(raw, 10, 64)
 		if parseErr != nil {
 			shared.BadRequest(c, "station_id invalide")
