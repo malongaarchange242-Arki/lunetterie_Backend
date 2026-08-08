@@ -100,9 +100,15 @@ func (r *UserRepository) FindByName(name string) (*models.User, error) {
 }
 
 func (r *UserRepository) Create(user *models.User) error {
-	query := `INSERT INTO users (first_name, last_name, email, phone, gender, city, role_id, station_id, is_active, password_hash, password_hash_deprecated, created_at, updated_at)
+	if user.City != nil && *user.City != "" {
+		query := `INSERT INTO users (first_name, last_name, email, phone, gender, city, role_id, station_id, is_active, password_hash, password_hash_deprecated, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '', NOW(), NOW()) RETURNING id, created_at, updated_at`
-	return r.db.QueryRowx(query, user.FirstName, user.LastName, user.Email, user.Phone, user.Gender, user.City, user.RoleID, user.StationID, user.IsActive, user.PasswordHash).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+		return r.db.QueryRowx(query, user.FirstName, user.LastName, user.Email, user.Phone, user.Gender, user.City, user.RoleID, user.StationID, user.IsActive, user.PasswordHash).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	}
+
+	query := `INSERT INTO users (first_name, last_name, email, phone, gender, role_id, station_id, is_active, password_hash, password_hash_deprecated, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', NOW(), NOW()) RETURNING id, created_at, updated_at`
+	return r.db.QueryRowx(query, user.FirstName, user.LastName, user.Email, user.Phone, user.Gender, user.RoleID, user.StationID, user.IsActive, user.PasswordHash).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 }
 
 func (r *UserRepository) SetPassword(userID int64, passwordHash string) error {
