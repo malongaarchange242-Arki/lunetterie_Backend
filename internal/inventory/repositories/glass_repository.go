@@ -100,15 +100,14 @@ func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryIte
 	query := `
 		SELECT
 			ga.reference, ga.brand,
-			COUNT(*) FILTER (WHERE s.name = 'Stock Principal') AS qty_general,
-			COUNT(*) FILTER (WHERE s.name = 'Station Pointe-Noire') AS qty_local,
-			COUNT(*) FILTER (WHERE s.name = 'Présentoir') AS qty_presentoir,
+			COUNT(*) FILTER (WHERE g.status = 'EN_STOCK_GENERAL') AS qty_general,
+			COUNT(*) FILTER (WHERE g.status = 'EN_STOCK_SOUS_STATION') AS qty_local,
+			COUNT(*) FILTER (WHERE g.status = 'EN_PRESENTOIR') AS qty_presentoir,
 			COUNT(*) AS qty_total,
 			(COUNT(*) <= $1) AS is_critical
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
-		LEFT JOIN stations s ON s.id = g.station_id
-		WHERE g.status NOT IN ('VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE')
+		WHERE g.status NOT IN ('VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE', 'RESERVEE', 'EN_TRANSIT', 'EN_LABORATOIRE', 'PRETE_A_LIVRER')
 		GROUP BY ga.reference, ga.brand
 		ORDER BY ga.reference NULLS LAST`
 	if err := r.db.Select(&items, query, stockCriticalThreshold); err != nil {
