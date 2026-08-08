@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -161,15 +162,20 @@ func (h *AuthHandler) ListStations(c *gin.Context) {
 // l'étape email de la page de connexion (avant authentification). Ne renvoie PAS le
 // reste du dossier utilisateur : contrairement à GET /auth/users (désormais réservé aux
 // rôles admin), cette route reste publique mais expose le minimum nécessaire.
-func (h *AuthHandler) CheckEmail(c *gin.Context) {
-	var req dto.CheckEmailRequest
+// CheckUser indique si un compte correspond au nom saisi, et s'il a déjà un code.
+func (h *AuthHandler) CheckUser(c *gin.Context) {
+	var req dto.CheckUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.BadRequest(c, "Email invalide")
+		shared.BadRequest(c, "Nom invalide")
 		return
 	}
 
-	user, err := h.userRepo.FindByEmail(req.Email)
+	user, err := h.userRepo.FindByName(req.Name)
 	if err != nil {
+		if errors.Is(err, repositories.ErrAmbiguousName) {
+			shared.BadRequest(c, "Plusieurs employés portent ce nom. Contactez l'administration.")
+			return
+		}
 		shared.Success(c, http.StatusOK, gin.H{"exists": false})
 		return
 	}
@@ -227,8 +233,14 @@ func (h *AuthHandler) LoginWithPassword(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userRepo.FindByEmail(req.Email)
+	user, err := h.userRepo.FindByName(req.Name)
 	if err != nil {
+		// L'homonymie mérite son propre message : répondre « identifiants incorrects »
+		// enverrait l'employé chercher une erreur de saisie qui n'existe pas.
+		if errors.Is(err, repositories.ErrAmbiguousName) {
+			shared.BadRequest(c, "Plusieurs employés portent ce nom. Contactez l'administration.")
+			return
+		}
 		shared.Unauthorized(c, "Identifiants incorrects")
 		return
 	}
@@ -299,14 +311,23 @@ func (h *AuthHandler) SetInitialPassword(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userRepo.FindByEmail(req.Email)
+	if !dto.IsValidPIN(req.Password) {
+		shared.BadRequest(c, "Le code doit contenir exactement 4 ou 6 chiffres")
+		return
+	}
+
+	user, err := h.userRepo.FindByName(req.Name)
 	if err != nil {
+		if errors.Is(err, repositories.ErrAmbiguousName) {
+			shared.BadRequest(c, "Plusieurs employés portent ce nom. Contactez l'administration.")
+			return
+		}
 		shared.Unauthorized(c, "Compte introuvable")
 		return
 	}
 
 	if user.PasswordHash != nil {
-		shared.BadRequest(c, "Un mot de passe est déjà défini pour ce compte")
+		shared.BadRequest(c, "Un code est déjà défini pour ce compte")
 		return
 	}
 

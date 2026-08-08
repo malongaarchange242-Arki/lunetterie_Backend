@@ -75,6 +75,20 @@ func (r *SendListRepository) List(status string) ([]models.SendList, error) {
 	return lists, nil
 }
 
+// GetByID récupère l'en-tête d'une liste : c'est lui qui porte la ville, donc la station
+// locale de destination au moment de l'expédition.
+func (r *SendListRepository) GetByID(id int64) (*models.SendList, error) {
+	var list models.SendList
+	query := `
+        SELECT id, session_code, city, item_count, status, created_by, created_at, updated_at
+        FROM send_lists
+        WHERE id = $1`
+	if err := r.db.Get(&list, query, id); err != nil {
+		return nil, fmt.Errorf("liste introuvable: %w", err)
+	}
+	return &list, nil
+}
+
 func (r *SendListRepository) ListItems(listID int64, query string) ([]models.SendListItem, error) {
 	items := []models.SendListItem{}
 	baseQuery := `
@@ -91,6 +105,27 @@ func (r *SendListRepository) ListItems(listID int64, query string) ([]models.Sen
 		return nil, fmt.Errorf("impossible de récupérer le contenu de la liste: %w", err)
 	}
 	return items, nil
+}
+
+// MarkProcessed clôt une liste dont toutes les montures ont été vérifiées et le colis
+// préparé. Accepte NOUVELLE comme VUE : une liste peut être contrôlée sans que la
+// notification ait été acquittée. Rejouer l'appel ne change rien.
+func (r *SendListRepository) MarkProcessed(ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result, err := r.db.Exec(`
+        UPDATE send_lists
+        SET status = 'TRAITEE', updated_at = NOW()
+        WHERE id = ANY($1) AND status <> 'TRAITEE'`, pq.Array(ids))
+	if err != nil {
+		return 0, fmt.Errorf("impossible de clôturer les listes: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("impossible de vérifier la mise à jour: %w", err)
+	}
+	return rows, nil
 }
 
 // MarkSeen fait passer les listes de NOUVELLE à VUE. Le filtre sur NOUVELLE rend l'appel

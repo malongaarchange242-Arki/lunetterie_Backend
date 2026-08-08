@@ -5,11 +5,20 @@ import "time"
 // MovementListItem représente un mouvement enrichi (monture, postes, emplacements, utilisateur)
 // pour l'affichage dans l'historique/traffic des montures.
 type MovementListItem struct {
-	ID               int64     `db:"id" json:"id"`
-	GlassID          int64     `db:"glass_id" json:"glass_id"`
-	Barcode          string    `db:"barcode" json:"barcode"`
-	Reference        *string   `db:"reference" json:"reference,omitempty"`
-	Brand            *string   `db:"brand" json:"brand,omitempty"`
+	ID        int64   `db:"id" json:"id"`
+	GlassID   int64   `db:"glass_id" json:"glass_id"`
+	Barcode   string  `db:"barcode" json:"barcode"`
+	Reference *string `db:"reference" json:"reference,omitempty"`
+	Brand     *string `db:"brand" json:"brand,omitempty"`
+	// Attributs et photos de la monture : l'historique du poste de scan affiche des
+	// vignettes et filtre par forme/genre, il lui faut autre chose que la référence.
+	Gender           *string   `db:"gender" json:"gender,omitempty"`
+	Shape            *string   `db:"shape" json:"shape,omitempty"`
+	Color            *string   `db:"color" json:"color,omitempty"`
+	Size             *string   `db:"size" json:"size,omitempty"`
+	Price            *float64  `db:"price" json:"price,omitempty"`
+	PhotoMontureURL  *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
+	PhotoBrancheURL  *string   `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
 	FromStationID    *int64    `db:"from_station_id" json:"from_station_id,omitempty"`
 	FromStationName  *string   `db:"from_station_name" json:"from_station_name,omitempty"`
 	ToStationID      *int64    `db:"to_station_id" json:"to_station_id,omitempty"`

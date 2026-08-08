@@ -113,6 +113,27 @@ func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 	shared.Success(c, http.StatusOK, response)
 }
 
+// RelocateGlass réattribue un emplacement libre à une monture, dans la même zone de la même
+// station. Appelé quand on réimprime l'étiquette et qu'on repose la monture ailleurs.
+// POST /api/v1/inventory/glasses/:barcode/relocate
+func (h *GlassHandler) RelocateGlass(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	location, err := h.display.RelocateGlass(c.Param("barcode"), userID)
+	if err != nil {
+		shared.BadRequest(c, err.Error())
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{
+		"location_id": location.ID,
+		"code":        location.Code,
+	})
+}
+
 // GetSimilarGlasses classe les montures disponibles par ressemblance (genre, forme, prix) avec
 // la monture identifiée par code-barres — pour proposer une alternative quand elle est
 // indisponible, ou simplement suggérer des montures proches.

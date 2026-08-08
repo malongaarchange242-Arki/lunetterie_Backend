@@ -24,6 +24,65 @@ func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *re
 	return &DisplayService{glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation, stationRepo: stationRepo, transferRepo: transferRepo}
 }
 
+// RelocateGlass attribue un nouvel emplacement libre à une monture, dans la même zone de la
+// même station — utilisé quand on réimprime son étiquette et qu'on la repose ailleurs.
+//
+// L'ordre compte : on réserve le nouvel emplacement AVANT de libérer l'ancien. L'inverse
+// laisserait, en cas d'échec de la recherche, une monture sans emplacement. Ici le pire cas
+// est un emplacement resté marqué occupé, qui se corrige, alors qu'une monture égarée non.
+//
+// FindFreeLocation ne rend que des emplacements LIBRE : celui qu'occupe actuellement la
+// monture est donc exclu d'office, le nouvel emplacement est toujours différent.
+func (s *DisplayService) RelocateGlass(barcode string, userID int64) (*models.StorageLocation, error) {
+	glass, err := s.glassRepo.GetByBarcode(barcode)
+	if err != nil {
+		return nil, err
+	}
+
+	zone := models.ZoneStock
+	switch glass.Status {
+	case models.StatusEnPresentoir:
+		zone = models.ZonePresentoir
+	case models.StatusEnLaboratoire:
+		zone = models.ZoneLaboratoire
+	}
+
+	location, err := s.allocation.FindFreeLocation(glass.StationID, zone)
+	if err != nil {
+		return nil, err
+	}
+
+	oldLocationID := glass.LocationID
+	if err := s.glassRepo.UpdateLocation(glass.ID, location.ID); err != nil {
+		// La monture n'a pas bougé : on rend l'emplacement qu'on venait de réserver.
+		if freeErr := s.allocation.FreeLocation(location.ID); freeErr != nil {
+			log.Printf("⚠️  Emplacement #%d réservé mais non attribué et non libéré: %v", location.ID, freeErr)
+		}
+		return nil, err
+	}
+
+	if oldLocationID != nil {
+		if err := s.allocation.FreeLocation(*oldLocationID); err != nil {
+			log.Printf("⚠️  Erreur libération ancien emplacement (glass #%d): %v", glass.ID, err)
+		}
+	}
+
+	movement := &models.Movement{
+		GlassID:        glass.ID,
+		FromStationID:  &glass.StationID,
+		ToStationID:    &glass.StationID,
+		FromLocationID: oldLocationID,
+		ToLocationID:   &location.ID,
+		Action:         models.ActionRangement,
+		UserID:         userID,
+	}
+	if err := s.movementRepo.Create(movement); err != nil {
+		log.Printf("⚠️  Erreur création mouvement rangement (glass #%d): %v", glass.ID, err)
+	}
+
+	return location, nil
+}
+
 // placeableStatuses liste les statuts à partir desquels une monture peut être placée sur le présentoir ou en laboratoire
 var placeableStatuses = map[models.GlassStatus]bool{
 	models.StatusEnStockSousStation: true,

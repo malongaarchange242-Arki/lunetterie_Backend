@@ -135,7 +135,8 @@ func main() {
 	demandBasketRepo := repositories.NewDemandBasketRepository(db)
 	demandBasketHandler := inventoryHandlers.NewDemandBasketHandler(demandBasketRepo)
 	sendListRepo := repositories.NewSendListRepository(db)
-	sendListHandler := inventoryHandlers.NewSendListHandler(sendListRepo)
+	sendListDispatchSvc := services.NewSendListDispatchService(sendListRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
+	sendListHandler := inventoryHandlers.NewSendListHandler(sendListRepo, sendListDispatchSvc)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
@@ -320,7 +321,7 @@ func main() {
 			auth.POST("/login-fingerprint", loginLimiter, authHandler.LoginWithFingerprint)
 			auth.POST("/login", loginLimiter, authHandler.LoginWithPassword)
 			// Public : utilisée par la page de connexion avant authentification (étape email).
-			auth.POST("/check-email", loginLimiter, authHandler.CheckEmail)
+			auth.POST("/check-user", loginLimiter, authHandler.CheckUser)
 			auth.POST("/set-password", loginLimiter, authHandler.SetInitialPassword)
 
 			auth.Use(authMiddleware.RequireAuth(authSvc))
@@ -360,6 +361,11 @@ func main() {
 				sendLists.GET("", sendListHandler.List)
 				sendLists.GET("/:id/items", sendListHandler.GetItems)
 				sendLists.POST("/seen", sendListHandler.MarkSeen)
+				sendLists.POST("/processed", sendListHandler.MarkProcessed)
+				// Envoi effectif du colis vers le magasin de la ville de la liste : déplace les
+				// montures et clôt la liste. Même ouverture que /processed, c'est le magasinier
+				// qui déclenche l'envoi une fois toutes les montures vérifiées.
+				sendLists.POST("/dispatch", sendListHandler.Dispatch)
 			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;
@@ -386,6 +392,7 @@ func main() {
 			inventory.GET("/glasses", glassHandler.ListGlasses)
 			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
 			inventory.GET("/glasses/:barcode/similar", glassHandler.GetSimilarGlasses)
+			inventory.POST("/glasses/:barcode/relocate", glassHandler.RelocateGlass)
 			inventory.GET("/stock-summary", glassHandler.GetStockSummary)
 			storage := inventory.Group("/storage")
 			{

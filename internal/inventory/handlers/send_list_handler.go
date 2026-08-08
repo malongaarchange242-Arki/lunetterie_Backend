@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/models"
+	"github.com/lunetterie/backend/internal/inventory/services"
 	"github.com/lunetterie/backend/internal/shared"
 )
 
@@ -16,16 +17,23 @@ type sendListRepository interface {
 	List(status string) ([]models.SendList, error)
 	ListItems(listID int64, query string) ([]models.SendListItem, error)
 	MarkSeen(ids []int64) (int64, error)
+	MarkProcessed(ids []int64) (int64, error)
+}
+
+// sendListDispatcher expédie une liste vers la station locale de sa ville.
+type sendListDispatcher interface {
+	Dispatch(listID, fromStationID, userID int64) (*services.SendListDispatchResult, error)
 }
 
 // SendListHandler expose les listes d'envoi : la direction les crée depuis une session de
 // réception terminée, le poste de scan les scrute pour prévenir le magasinier.
 type SendListHandler struct {
-	repo sendListRepository
+	repo       sendListRepository
+	dispatcher sendListDispatcher
 }
 
-func NewSendListHandler(repo sendListRepository) *SendListHandler {
-	return &SendListHandler{repo: repo}
+func NewSendListHandler(repo sendListRepository, dispatcher sendListDispatcher) *SendListHandler {
+	return &SendListHandler{repo: repo, dispatcher: dispatcher}
 }
 
 // Create archive une liste envoyée vers un magasin.
@@ -96,6 +104,70 @@ func (h *SendListHandler) GetItems(c *gin.Context) {
 		return
 	}
 	shared.Success(c, http.StatusOK, gin.H{"items": items})
+}
+
+// MarkProcessed clôt les listes dont le colis est préparé, une fois toutes les montures
+// vérifiées au poste de scan.
+// POST /api/v1/inventory/send-lists/processed
+func (h *SendListHandler) MarkProcessed(c *gin.Context) {
+	var req struct {
+		IDs []int64 `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Données invalides")
+		return
+	}
+	if len(req.IDs) == 0 {
+		shared.BadRequest(c, "ids est requis")
+		return
+	}
+
+	updated, err := h.repo.MarkProcessed(req.IDs)
+	if err != nil {
+		shared.InternalError(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"updated": updated})
+}
+
+// Dispatch envoie les montures d'une liste vérifiée vers la station locale de sa ville : les
+// montures atterrissent dans le stock de ce magasin (EN_STOCK_SOUS_STATION) et la liste est
+// clôturée. Remplace l'appel à /processed, qui ne faisait que clore la liste.
+//
+// L'identifiant passe par le corps et non par l'URL, comme /seen et /processed : le groupe
+// /send-lists a déjà des routes POST statiques, une route paramétrée au même niveau les
+// mettrait en conflit dans l'arbre de routage.
+// POST /api/v1/inventory/send-lists/dispatch
+func (h *SendListHandler) Dispatch(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		ID            int64 `json:"id"`
+		FromStationID int64 `json:"from_station_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Données invalides")
+		return
+	}
+	if req.ID <= 0 {
+		shared.BadRequest(c, "id est requis")
+		return
+	}
+	if req.FromStationID <= 0 {
+		shared.BadRequest(c, "from_station_id est requis")
+		return
+	}
+
+	result, err := h.dispatcher.Dispatch(req.ID, req.FromStationID, userID)
+	if err != nil {
+		shared.BadRequest(c, err.Error())
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{"dispatch": result})
 }
 
 // MarkSeen accuse réception côté poste de scan, pour que la notification ne se répète pas.
