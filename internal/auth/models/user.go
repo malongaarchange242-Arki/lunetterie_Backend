@@ -14,6 +14,7 @@ type User struct {
 	WebAuthnRegistered  bool       `db:"webauthn_registered" json:"webauthn_registered"`
 	Gender              *string    `db:"gender" json:"gender,omitempty"`
 	Phone               *string    `db:"phone" json:"phone,omitempty"`
+	City                *string    `db:"city" json:"city,omitempty"`
 	RoleID              int64      `db:"role_id" json:"role_id"`
 	RoleName            string     `db:"role_name" json:"role_name,omitempty"`
 	StationID           *int64     `db:"station_id" json:"station_id,omitempty"`

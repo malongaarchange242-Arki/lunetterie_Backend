@@ -7,6 +7,7 @@ type CreateUserRequest struct {
 	Password  string `json:"password" binding:"omitempty,min=8"`
 	Phone     string `json:"phone"`
 	Gender    string `json:"gender"`
+	City      string `json:"city"`
 	RoleID    int64  `json:"role_id" binding:"required"`
 	StationID *int64 `json:"station_id"`
 }
