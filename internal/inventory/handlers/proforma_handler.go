@@ -12,15 +12,96 @@ import (
 )
 
 type proformaRepository interface {
-	Create(proforma *models.Proforma, items []models.ProformaItem) error
+	Create(proforma *models.Proforma, items []models.ProformaItem, prescription *models.ProformaPrescription) error
 	List(status string) ([]models.Proforma, error)
 	GetByID(id int64) (*models.Proforma, error)
+	GetPrescription(proformaID int64) (*models.ProformaPrescription, error)
 	SettleItem(proformaID, itemID int64, outcome string) (int64, error)
 	CloseIfComplete(proformaID, userID int64) (string, error)
 }
 
+// Les valeurs d'ordonnance arrivent telles que la vendeuse les a tapées : « +1.00 »,
+// « 60° », « -0,50 » avec une virgule, ou rien. On convertit ce qui se laisse convertir et
+// on renvoie nil pour le reste — la note en clair, toujours enregistrée à côté, garde de
+// toute façon la saisie d'origine. Refuser la proforma pour un caractère parasite serait
+// la pire des réponses au comptoir.
+func optionalDecimal(raw string) *float64 {
+	cleaned := strings.TrimSpace(raw)
+	cleaned = strings.NewReplacer(",", ".", "°", "", "+", "", " ", "").Replace(cleaned)
+	if cleaned == "" {
+		return nil
+	}
+	value, err := strconv.ParseFloat(cleaned, 64)
+	if err != nil {
+		return nil
+	}
+	return &value
+}
+
+// L'axe est un entier de 0 à 180 : hors bornes, la contrainte de la table rejetterait
+// toute la transaction, donc on écarte la valeur ici plutôt que de perdre la proforma.
+func optionalAxis(raw string) *int {
+	value := optionalDecimal(raw)
+	if value == nil {
+		return nil
+	}
+	axis := int(*value)
+	if axis < 0 || axis > 180 {
+		return nil
+	}
+	return &axis
+}
+
+func optionalText(raw string) *string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func buildPrescription(req *models.ProformaPrescriptionRequest) *models.ProformaPrescription {
+	if req == nil {
+		return nil
+	}
+	remise := req.RemisePct
+	// La table borne la remise à 0–100 ; on la ramène plutôt que de faire échouer
+	// l'enregistrement sur une saisie aberrante.
+	if remise < 0 {
+		remise = 0
+	} else if remise > 100 {
+		remise = 100
+	}
+	return &models.ProformaPrescription{
+		Societe: optionalText(req.Societe),
+		Foyer:   optionalText(req.Foyer),
+		Teinte:  optionalText(req.Teinte),
+
+		ODSphere:   optionalDecimal(req.ODSphere),
+		ODCylindre: optionalDecimal(req.ODCylindre),
+		ODAxe:      optionalAxis(req.ODAxe),
+		ODAddition: optionalDecimal(req.ODAddition),
+		ODPrix:     req.ODPrix,
+
+		OGSphere:   optionalDecimal(req.OGSphere),
+		OGCylindre: optionalDecimal(req.OGCylindre),
+		OGAxe:      optionalAxis(req.OGAxe),
+		OGAddition: optionalDecimal(req.OGAddition),
+		OGPrix:     req.OGPrix,
+
+		AccessoiresLabel: optionalText(req.AccessoiresLabel),
+		AccessoiresPrix:  req.AccessoiresPrix,
+		MontagePrix:      req.MontagePrix,
+		RemisePct:        remise,
+		NoteLibre:        optionalText(req.NoteLibre),
+	}
+}
+
 type proformaGlassRepository interface {
 	GetByBarcode(barcode string) (*models.Glass, error)
+	// La référence, la marque, la forme et la couleur ne sont pas sur glasses : elles
+	// viennent de glass_analysis, que seule cette requête joint.
+	FindDetailByBarcode(barcode string) (*models.GlassListItem, error)
 }
 
 // proformaDisplayService : les deux mouvements physiques qu'une proforma déclenche.
@@ -66,29 +147,49 @@ func (h *ProformaHandler) Create(c *gin.Context) {
 		shared.BadRequest(c, "Le nom du client est requis")
 		return
 	}
-	if len(req.Barcodes) == 0 {
+
+	// Deux formes acceptées : `lines` porte le geste « offerte », `barcodes` est l'ancien
+	// envoi que les clients pas encore migrés utilisent toujours.
+	lines := req.Lines
+	if len(lines) == 0 {
+		for _, raw := range req.Barcodes {
+			lines = append(lines, models.ProformaLineRequest{Barcode: raw})
+		}
+	}
+	if len(lines) == 0 {
 		shared.BadRequest(c, "Sélectionnez au moins une monture")
 		return
 	}
 
 	// Les attributs sont figés ici, à l'émission : la proforma doit rester lisible même si
-	// la monture change de statut ou d'emplacement par la suite.
-	items := make([]models.ProformaItem, 0, len(req.Barcodes))
-	barcodes := make([]string, 0, len(req.Barcodes))
-	for _, raw := range req.Barcodes {
-		barcode := strings.TrimSpace(raw)
+	// la monture change de statut ou d'emplacement par la suite. Ils n'étaient en réalité
+	// pas recopiés — seul le code-barres l'était — et une monture supprimée laissait une
+	// ligne muette, à rebours de ce que la table promettait.
+	items := make([]models.ProformaItem, 0, len(lines))
+	barcodes := make([]string, 0, len(lines))
+	for _, line := range lines {
+		barcode := strings.TrimSpace(line.Barcode)
 		if barcode == "" {
 			continue
 		}
-		glass, err := h.glassRepo.GetByBarcode(barcode)
-		if err != nil {
+		// FindDetailByBarcode et non GetByBarcode : la table glasses ne porte ni référence
+		// ni marque ni forme ni couleur, elles viennent de glass_analysis par jointure.
+		// C'est ce détour manquant qui laissait ces colonnes à NULL.
+		glass, err := h.glassRepo.FindDetailByBarcode(barcode)
+		if err != nil || glass == nil {
 			shared.BadRequest(c, "Monture introuvable : "+barcode)
 			return
 		}
-		item := models.ProformaItem{Barcode: &barcode}
+		item := models.ProformaItem{Barcode: &barcode, Offerte: line.Offerte}
 		glassID := glass.ID
 		item.GlassID = &glassID
-		if glass.Price != nil {
+		item.Reference = glass.Reference
+		item.Brand = glass.Brand
+		item.Shape = glass.Shape
+		item.Color = glass.Color
+		// Offerte : le prix tombe à zéro et la colonne dit pourquoi. Auparavant la case
+		// n'était pas transmise du tout et la monture repartait à plein tarif en base.
+		if glass.Price != nil && !line.Offerte {
 			item.UnitPrice = *glass.Price
 		}
 		items = append(items, item)
@@ -114,7 +215,7 @@ func (h *ProformaHandler) Create(c *gin.Context) {
 	// L'enregistrement passe avant le déplacement : c'est l'index unique sur les lignes en
 	// attente qui garantit qu'une monture n'est pas promise à deux clients. Déplacer d'abord
 	// puis échouer ici laisserait des montures en caisse sans document.
-	if err := h.repo.Create(proforma, items); err != nil {
+	if err := h.repo.Create(proforma, items, buildPrescription(req.Prescription)); err != nil {
 		shared.BadRequest(c, err.Error())
 		return
 	}
@@ -157,6 +258,12 @@ func (h *ProformaHandler) Get(c *gin.Context) {
 	if err != nil {
 		shared.NotFound(c, "Proforma introuvable")
 		return
+	}
+	// Les proformas antérieures à la 027 n'ont pas d'ordonnance en colonnes : nil, et le
+	// document se relit alors depuis la note comme avant. Une erreur de lecture ne doit
+	// pas cacher la proforma elle-même.
+	if prescription, err := h.repo.GetPrescription(id); err == nil {
+		proforma.Prescription = prescription
 	}
 	shared.Success(c, http.StatusOK, gin.H{"proforma": proforma})
 }

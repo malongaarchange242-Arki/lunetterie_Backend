@@ -14,6 +14,8 @@ import (
 
 type sendListRepository interface {
 	Create(list *models.SendList, items []models.SendListItemRequest) error
+	NextStockListCode() (string, error)
+	SplitAvailableBarcodes(barcodes []string) ([]string, map[string]string, error)
 	List(status string) ([]models.SendList, error)
 	ListItems(listID int64, query string) ([]models.SendListItem, error)
 	MarkSeen(ids []int64) (int64, error)
@@ -47,13 +49,66 @@ func (h *SendListHandler) Create(c *gin.Context) {
 
 	sessionCode := strings.TrimSpace(req.SessionCode)
 	city := strings.TrimSpace(req.City)
-	if sessionCode == "" || city == "" {
-		shared.BadRequest(c, "session_code et city sont requis")
+	if city == "" {
+		shared.BadRequest(c, "city est requis")
 		return
 	}
 	if len(req.Items) == 0 {
 		shared.BadRequest(c, "une liste vide ne peut pas être envoyée")
 		return
+	}
+
+	// Pas de session de réception : la liste est composée depuis le stock existant. On lui
+	// donne un code à part pour que le magasinier distingue, dans « Listes reçues », un
+	// arrivage fournisseur d'un réapprovisionnement de rayon.
+	fromStock := sessionCode == ""
+	if fromStock {
+		generated, err := h.repo.NextStockListCode()
+		if err != nil {
+			shared.InternalError(c, err.Error())
+			return
+		}
+		sessionCode = generated
+	}
+
+	items := req.Items
+	rejected := map[string]string{}
+	// La vérification ne porte que sur les listes issues du stock : celles d'un arrivage
+	// décrivent des montures qui viennent d'être réceptionnées, le contrôle n'aurait rien
+	// à dire de plus.
+	if fromStock {
+		barcodes := make([]string, 0, len(req.Items))
+		for _, item := range req.Items {
+			if code := strings.TrimSpace(item.Barcode); code != "" {
+				barcodes = append(barcodes, code)
+			}
+		}
+
+		available, unavailable, err := h.repo.SplitAvailableBarcodes(barcodes)
+		if err != nil {
+			shared.InternalError(c, err.Error())
+			return
+		}
+		rejected = unavailable
+
+		keep := make(map[string]bool, len(available))
+		for _, code := range available {
+			keep[code] = true
+		}
+		filtered := make([]models.SendListItemRequest, 0, len(available))
+		for _, item := range req.Items {
+			if keep[strings.TrimSpace(item.Barcode)] {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+
+		// Tout est indisponible : on ne crée pas une liste vide que le magasinier ouvrirait
+		// pour rien. Les motifs partent quand même, c'est ce qui explique le refus.
+		if len(items) == 0 {
+			shared.BadRequestWithData(c, "Aucune des montures sélectionnées n'est disponible.", gin.H{"rejected": rejected})
+			return
+		}
 	}
 
 	list := &models.SendList{SessionCode: sessionCode, City: city}
@@ -63,12 +118,12 @@ func (h *SendListHandler) Create(c *gin.Context) {
 		}
 	}
 
-	if err := h.repo.Create(list, req.Items); err != nil {
+	if err := h.repo.Create(list, items); err != nil {
 		shared.InternalError(c, "Erreur lors de l'enregistrement de la liste")
 		return
 	}
 
-	shared.Created(c, gin.H{"list": list})
+	shared.Created(c, gin.H{"list": list, "rejected": rejected, "sent": len(items)})
 }
 
 // List renvoie les listes, filtrables par statut.

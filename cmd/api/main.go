@@ -175,6 +175,8 @@ func main() {
 	sendBoxHandler := inventoryHandlers.NewSendBoxHandler(sendListRepo, stationRepo)
 	proformaRepo := repositories.NewProformaRepository(db)
 	proformaHandler := inventoryHandlers.NewProformaHandler(proformaRepo, glassRepo, displaySvc, saleSvc)
+	claimRepo := repositories.NewClaimRepository(db)
+	claimHandler := inventoryHandlers.NewClaimHandler(claimRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
@@ -412,6 +414,8 @@ func main() {
 			// ouvrir que les cartons destinés à sa propre ville.
 			sendBoxes := inventory.Group("/send-boxes")
 			{
+				sendBoxes.GET("", sendBoxHandler.List)
+				sendBoxes.GET("/restock", sendBoxHandler.Restock)
 				sendBoxes.GET("/pending", sendBoxHandler.Pending)
 				sendBoxes.POST("/open", sendBoxHandler.Open)
 			}
@@ -424,6 +428,10 @@ func main() {
 				proformas.GET("", proformaHandler.List)
 				proformas.GET("/:id", proformaHandler.Get)
 				proformas.POST("/:id/settle", proformaHandler.Settle)
+			}
+			claims := inventory.Group("/claims")
+			{
+				claims.POST("", claimHandler.Create)
 			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;

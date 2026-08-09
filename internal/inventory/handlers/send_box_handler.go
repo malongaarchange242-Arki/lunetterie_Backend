@@ -12,6 +12,8 @@ import (
 )
 
 type sendBoxRepository interface {
+	ListBoxes(status, city string) ([]models.SendBox, error)
+	RestockSuggestions() ([]models.RestockSuggestion, error)
 	FindPendingBoxesByCity(city string) ([]models.SendBox, error)
 	FindBoxByCode(code string) (*models.SendBox, error)
 	FindBoxItems(boxID int64) ([]models.SendBoxItem, error)
@@ -57,6 +59,33 @@ func (h *SendBoxHandler) resolveStation(c *gin.Context, rawStationID string) (*a
 		return nil, "", false
 	}
 	return station, city, true
+}
+
+// List suit tous les cartons, toutes villes confondues : c'est la vue Expédition, qui doit
+// voir ce qui est parti et ce qui n'a pas encore été ouvert à l'arrivée.
+// GET /api/v1/inventory/send-boxes?status=CREATED&city=Pointe-Noire
+func (h *SendBoxHandler) List(c *gin.Context) {
+	boxes, err := h.repo.ListBoxes(strings.TrimSpace(c.Query("status")), strings.TrimSpace(c.Query("city")))
+	if err != nil {
+		shared.InternalError(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"boxes": boxes})
+}
+
+// Restock indique, pour chaque magasin déjà livré, combien de montures lui renvoyer pour le
+// remettre au niveau de sa dernière livraison, et lesquels sont sous le seuil d'alerte.
+// GET /api/v1/inventory/send-boxes/restock
+func (h *SendBoxHandler) Restock(c *gin.Context) {
+	suggestions, err := h.repo.RestockSuggestions()
+	if err != nil {
+		shared.InternalError(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{
+		"suggestions": suggestions,
+		"threshold":   models.RestockAlertRatio,
+	})
 }
 
 // Pending liste les cartons partis vers la ville du poste et pas encore ouverts.

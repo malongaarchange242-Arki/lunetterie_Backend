@@ -1,7 +1,10 @@
 package repositories
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -19,8 +22,14 @@ func NewProformaRepository(db *sqlx.DB) *ProformaRepository {
 const proformaColumns = `id, code, station_id, client_name, client_phone, total_amount, status,
         note, created_by, settled_by, settled_at, created_at, updated_at`
 
-const proformaItemColumns = `id, proforma_id, glass_id, barcode, reference, brand, unit_price,
-        outcome, settled_at, is_pending, created_at`
+const proformaItemColumns = `id, proforma_id, glass_id, barcode, reference, brand, shape, color,
+        unit_price, offerte, outcome, settled_at, is_pending, created_at`
+
+const proformaPrescriptionColumns = `proforma_id, societe, foyer, teinte,
+        od_sphere, od_cylindre, od_axe, od_addition, od_prix,
+        og_sphere, og_cylindre, og_axe, og_addition, og_prix,
+        accessoires_label, accessoires_prix, montage_prix, remise_pct, note_libre,
+        created_at, updated_at`
 
 // Create persiste l'en-tête et ses lignes dans une transaction : une proforma enregistrée
 // sans son contenu bloquerait des montures sans dire lesquelles.
@@ -28,7 +37,7 @@ const proformaItemColumns = `id, proforma_id, glass_id, barcode, reference, bran
 // Le code est bâti depuis la séquence de la table, réservée avant l'insertion : compter les
 // proformas existantes pour numéroter la suivante donnerait deux fois le même code à deux
 // vendeurs qui valident au même instant.
-func (r *ProformaRepository) Create(proforma *models.Proforma, items []models.ProformaItem) error {
+func (r *ProformaRepository) Create(proforma *models.Proforma, items []models.ProformaItem, prescription *models.ProformaPrescription) error {
 	if len(items) == 0 {
 		return fmt.Errorf("une proforma sans monture n'a pas de sens")
 	}
@@ -46,11 +55,21 @@ func (r *ProformaRepository) Create(proforma *models.Proforma, items []models.Pr
 	proforma.ID = nextID
 	proforma.Code = fmt.Sprintf("PRO-%d-%04d", time.Now().Year(), nextID)
 
-	var total float64
+	// Le total ne comptait que les montures : les verres, les accessoires et le montage
+	// n'y entraient pas, et la remise non plus. Le montant lu par la vendeuse et celui
+	// stocké divergeaient donc dès qu'il y avait un verre au dossier — et c'est le second
+	// que voit la comptabilité. Même formule que computeTotals() côté écran.
+	var montures float64
 	for _, item := range items {
-		total += item.UnitPrice
+		montures += item.UnitPrice
 	}
-	proforma.TotalAmount = total
+	brut := montures
+	remisePct := 0.0
+	if prescription != nil {
+		brut += prescription.ODPrix + prescription.OGPrix + prescription.AccessoiresPrix + prescription.MontagePrix
+		remisePct = prescription.RemisePct
+	}
+	proforma.TotalAmount = brut - math.Round(brut*remisePct/100)
 	proforma.Status = models.ProformaStatusEnAttente
 
 	header := `
@@ -72,8 +91,8 @@ func (r *ProformaRepository) Create(proforma *models.Proforma, items []models.Pr
 	}
 
 	line := `
-        INSERT INTO proforma_items (proforma_id, glass_id, barcode, reference, brand, unit_price)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO proforma_items (proforma_id, glass_id, barcode, reference, brand, shape, color, unit_price, offerte)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id, created_at`
 	for i := range items {
 		items[i].ProformaID = proforma.ID
@@ -84,7 +103,10 @@ func (r *ProformaRepository) Create(proforma *models.Proforma, items []models.Pr
 			items[i].Barcode,
 			items[i].Reference,
 			items[i].Brand,
+			items[i].Shape,
+			items[i].Color,
 			items[i].UnitPrice,
+			items[i].Offerte,
 		).Scan(&items[i].ID, &items[i].CreatedAt); err != nil {
 			// L'index unique partiel sur (glass_id) WHERE is_pending remonte ici : la monture
 			// est déjà engagée sur une autre proforma en attente. C'est le blocage demandé, on
@@ -99,11 +121,48 @@ func (r *ProformaRepository) Create(proforma *models.Proforma, items []models.Pr
 		}
 	}
 
+	// L'ordonnance entre dans la même transaction que l'en-tête : une proforma sans sa
+	// grille laisserait la Caisse deviner ce que le client a commandé.
+	if prescription != nil {
+		prescription.ProformaID = proforma.ID
+		rx := `
+        INSERT INTO proforma_prescriptions (proforma_id, societe, foyer, teinte,
+            od_sphere, od_cylindre, od_axe, od_addition, od_prix,
+            og_sphere, og_cylindre, og_axe, og_addition, og_prix,
+            accessoires_label, accessoires_prix, montage_prix, remise_pct, note_libre)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        RETURNING created_at, updated_at`
+		if err := tx.QueryRowx(rx,
+			prescription.ProformaID,
+			prescription.Societe, prescription.Foyer, prescription.Teinte,
+			prescription.ODSphere, prescription.ODCylindre, prescription.ODAxe, prescription.ODAddition, prescription.ODPrix,
+			prescription.OGSphere, prescription.OGCylindre, prescription.OGAxe, prescription.OGAddition, prescription.OGPrix,
+			prescription.AccessoiresLabel, prescription.AccessoiresPrix, prescription.MontagePrix, prescription.RemisePct, prescription.NoteLibre,
+		).Scan(&prescription.CreatedAt, &prescription.UpdatedAt); err != nil {
+			return fmt.Errorf("impossible d'enregistrer l'ordonnance: %w", err)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("impossible de valider la proforma: %w", err)
 	}
 	proforma.Items = items
+	proforma.Prescription = prescription
 	return nil
+}
+
+// GetPrescription renvoie l'ordonnance d'une proforma, ou nil si elle n'en a pas — les
+// proformas créées avant la 027 n'ont que leur note.
+func (r *ProformaRepository) GetPrescription(proformaID int64) (*models.ProformaPrescription, error) {
+	var prescription models.ProformaPrescription
+	query := `SELECT ` + proformaPrescriptionColumns + ` FROM proforma_prescriptions WHERE proforma_id = $1`
+	if err := r.db.Get(&prescription, query, proformaID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("impossible de récupérer l'ordonnance: %w", err)
+	}
+	return &prescription, nil
 }
 
 // List renvoie les proformas, filtrées par statut si celui-ci est fourni. Les plus récentes

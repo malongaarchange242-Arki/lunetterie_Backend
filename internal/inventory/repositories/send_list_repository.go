@@ -103,6 +103,144 @@ func (r *SendListRepository) FindPendingBoxesByCity(city string) ([]models.SendB
 	return boxes, nil
 }
 
+// ListBoxes liste les cartons, filtrés par statut et/ou ville si fournis. Sert la vue
+// Expédition, qui suit tous les colis partis vers tous les magasins — là où
+// FindPendingBoxesByCity ne répond qu'à un poste sur sa propre ville.
+func (r *SendListRepository) ListBoxes(status, city string) ([]models.SendBox, error) {
+	boxes := []models.SendBox{}
+	query := `SELECT ` + sendBoxColumns + ` FROM send_boxes WHERE 1 = 1`
+	args := []interface{}{}
+	if status != "" {
+		args = append(args, status)
+		query += fmt.Sprintf(" AND status = $%d", len(args))
+	}
+	if city != "" {
+		args = append(args, city)
+		query += fmt.Sprintf(" AND LOWER(TRIM(city)) = LOWER(TRIM($%d))", len(args))
+	}
+	query += ` ORDER BY created_at DESC`
+	if err := r.db.Select(&boxes, query, args...); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les cartons: %w", err)
+	}
+	return boxes, nil
+}
+
+// UnavailableBarcodes trie les codes-barres demandés en deux : ceux qu'on peut réellement
+// expédier, et ceux qui ne sont plus disponibles, avec leur motif.
+//
+// Deux causes distinctes, deux messages différents :
+//   - la monture n'est plus au stock général (vendue, déjà partie, en laboratoire…)
+//   - elle est déjà promise sur une liste non traitée, donc un autre magasin l'attend
+//
+// Sans ce second contrôle, deux listes pourraient désigner la même monture et le magasinier
+// la chercherait en vain pour la seconde.
+func (r *SendListRepository) SplitAvailableBarcodes(barcodes []string) (available []string, rejected map[string]string, err error) {
+	rejected = map[string]string{}
+	if len(barcodes) == 0 {
+		return []string{}, rejected, nil
+	}
+
+	type row struct {
+		Barcode string  `db:"barcode"`
+		Status  *string `db:"status"`
+		OnList  *string `db:"on_list"`
+	}
+	rows := []row{}
+	query := `
+        SELECT
+            b.barcode,
+            g.status,
+            (SELECT sl.session_code
+               FROM send_list_items sli
+               JOIN send_lists sl ON sl.id = sli.list_id
+              WHERE sli.barcode = b.barcode AND sl.status <> 'TRAITEE'
+              LIMIT 1) AS on_list
+        FROM UNNEST($1::text[]) AS b(barcode)
+        LEFT JOIN glasses g ON g.barcode = b.barcode`
+	if err := r.db.Select(&rows, query, pq.Array(barcodes)); err != nil {
+		return nil, nil, fmt.Errorf("impossible de vérifier la disponibilité des montures: %w", err)
+	}
+
+	for _, item := range rows {
+		switch {
+		case item.Status == nil:
+			rejected[item.Barcode] = "monture introuvable"
+		case *item.Status != string(models.StatusEnStockGeneral):
+			rejected[item.Barcode] = "n'est plus au stock général (" + *item.Status + ")"
+		case item.OnList != nil:
+			rejected[item.Barcode] = "déjà sur la liste " + *item.OnList
+		default:
+			available = append(available, item.Barcode)
+		}
+	}
+	if available == nil {
+		available = []string{}
+	}
+	return available, rejected, nil
+}
+
+// NextStockListCode numérote les listes composées depuis le stock existant. Le préfixe les
+// distingue des arrivages fournisseur : le magasinier voit d'un coup d'œil, dans « Listes
+// reçues », s'il prépare une livraison neuve ou un réapprovisionnement de rayon.
+func (r *SendListRepository) NextStockListCode() (string, error) {
+	var seq int64
+	if err := r.db.QueryRowx(`SELECT nextval(pg_get_serial_sequence('send_lists', 'id'))`).Scan(&seq); err != nil {
+		return "", fmt.Errorf("impossible de réserver un numéro de liste: %w", err)
+	}
+	return fmt.Sprintf("STK-%d-%04d", time.Now().Year(), seq), nil
+}
+
+// RestockSuggestions confronte, pour chaque ville déjà livrée, la taille de son dernier
+// carton au stock qu'il lui reste. Les villes jamais livrées sont absentes du résultat : sans
+// carton de référence il n'y a pas de pourcentage à calculer, et les signaler reviendrait à
+// alerter en permanence sur un magasin qui n'a jamais rien reçu.
+//
+// DISTINCT ON retient le carton le plus récent par ville — la comparaison se fait sur la
+// ville normalisée, sinon « Pointe-Noire » et « pointe-noire » compteraient pour deux.
+func (r *SendListRepository) RestockSuggestions() ([]models.RestockSuggestion, error) {
+	suggestions := []models.RestockSuggestion{}
+	query := `
+        WITH last_box AS (
+            SELECT DISTINCT ON (LOWER(TRIM(city)))
+                LOWER(TRIM(city)) AS city_key,
+                city,
+                item_count,
+                created_at
+            FROM send_boxes
+            ORDER BY LOWER(TRIM(city)), created_at DESC
+        ),
+        local_stock AS (
+            SELECT LOWER(TRIM(s.city)) AS city_key, COUNT(*) AS qty
+            FROM glasses g
+            JOIN stations s ON s.id = g.station_id
+            WHERE g.status = $1 AND s.city IS NOT NULL
+            GROUP BY LOWER(TRIM(s.city))
+        )
+        SELECT
+            lb.city,
+            lb.item_count AS last_box_qty,
+            lb.created_at AS last_box_at,
+            COALESCE(ls.qty, 0) AS current_stock
+        FROM last_box lb
+        LEFT JOIN local_stock ls ON ls.city_key = lb.city_key
+        ORDER BY lb.city ASC`
+	if err := r.db.Select(&suggestions, query, string(models.StatusEnStockSousStation)); err != nil {
+		return nil, fmt.Errorf("impossible de calculer les besoins de réapprovisionnement: %w", err)
+	}
+
+	// Le calcul reste en Go plutôt qu'en SQL : le seuil et la quantité sont des règles
+	// métier, elles doivent se lire à côté de la constante qui les définit.
+	for i := range suggestions {
+		s := &suggestions[i]
+		s.ToSend = s.LastBoxQty - s.CurrentStock
+		if s.ToSend < 0 {
+			s.ToSend = 0
+		}
+		s.Alert = s.LastBoxQty > 0 && float64(s.CurrentStock) <= models.RestockAlertRatio*float64(s.LastBoxQty)
+	}
+	return suggestions, nil
+}
+
 // FindBoxByCode retrouve un carton par le code imprimé sur son étiquette. La comparaison
 // ignore la casse et les espaces : une douchette peut ajouter un blanc en fin de trame.
 func (r *SendListRepository) FindBoxByCode(code string) (*models.SendBox, error) {

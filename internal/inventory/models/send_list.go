@@ -69,6 +69,23 @@ type SendBox struct {
 	UpdatedAt       time.Time  `db:"updated_at" json:"updated_at"`
 }
 
+// RestockAlertRatio : un magasin est signalé quand il ne lui reste plus que 10 % de sa
+// dernière livraison. La référence est le dernier carton et non le cumul de tout ce qui a
+// été livré — un cumul ne fait que grossir, le seuil deviendrait vite hors d'atteinte et la
+// quantité à renvoyer correspondrait à tout ce qui a été vendu depuis l'ouverture.
+const RestockAlertRatio = 0.10
+
+// RestockSuggestion : ce qu'il faut renvoyer à un magasin pour le remettre au niveau de sa
+// dernière livraison.
+type RestockSuggestion struct {
+	City         string    `db:"city" json:"city"`
+	LastBoxQty   int       `db:"last_box_qty" json:"last_box_qty"`
+	LastBoxAt    time.Time `db:"last_box_at" json:"last_box_at"`
+	CurrentStock int       `db:"current_stock" json:"current_stock"`
+	ToSend       int       `db:"-" json:"to_send"`
+	Alert        bool      `db:"-" json:"alert"`
+}
+
 // SendBoxItem stores each send-list snapshot line that is attached to a box.
 type SendBoxItem struct {
 	ID           int64     `db:"id" json:"id"`
