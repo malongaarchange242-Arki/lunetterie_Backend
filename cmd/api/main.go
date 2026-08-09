@@ -177,6 +177,8 @@ func main() {
 	proformaHandler := inventoryHandlers.NewProformaHandler(proformaRepo, glassRepo, displaySvc, saleSvc)
 	claimRepo := repositories.NewClaimRepository(db)
 	claimHandler := inventoryHandlers.NewClaimHandler(claimRepo)
+	savFollowupRepo := repositories.NewSavFollowupRepository(db)
+	savFollowupHandler := inventoryHandlers.NewSavFollowupHandler(savFollowupRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
@@ -432,6 +434,14 @@ func main() {
 			claims := inventory.Group("/claims")
 			{
 				claims.POST("", claimHandler.Create)
+			}
+
+			// Poste SAV : le suivi client. Il se greffe sur les proformas, qui portent
+			// déjà le client, sa commande et son paiement.
+			sav := inventory.Group("/sav")
+			{
+				sav.GET("/followups", savFollowupHandler.List)
+				sav.PUT("/followups/:proformaId", savFollowupHandler.Save)
 			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;
