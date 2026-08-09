@@ -173,6 +173,8 @@ func main() {
 	sendListDispatchSvc := services.NewSendListDispatchService(sendListRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	sendListHandler := inventoryHandlers.NewSendListHandler(sendListRepo, sendListDispatchSvc)
 	sendBoxHandler := inventoryHandlers.NewSendBoxHandler(sendListRepo, stationRepo)
+	proformaRepo := repositories.NewProformaRepository(db)
+	proformaHandler := inventoryHandlers.NewProformaHandler(proformaRepo, glassRepo, displaySvc, saleSvc)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
@@ -412,6 +414,16 @@ func main() {
 			{
 				sendBoxes.GET("/pending", sendBoxHandler.Pending)
 				sendBoxes.POST("/open", sendBoxHandler.Open)
+			}
+
+			// Proformas : émises au Présentoir quand un client choisit ses montures, puis
+			// arbitrées ligne par ligne à la Caisse (encaissement ou retour en rayon).
+			proformas := inventory.Group("/proformas")
+			{
+				proformas.POST("", proformaHandler.Create)
+				proformas.GET("", proformaHandler.List)
+				proformas.GET("/:id", proformaHandler.Get)
+				proformas.POST("/:id/settle", proformaHandler.Settle)
 			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer/lister les sessions de réception est réservé à la direction/admin ;
