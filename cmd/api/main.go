@@ -444,14 +444,18 @@ func main() {
 				sav.PUT("/followups/:proformaId", savFollowupHandler.Save)
 			}
 			inventory.POST("/reception", receptionHandler.HandleReception)
-			// Créer/lister les sessions de réception est réservé à la direction/admin ;
-			// consulter un code précis et l'incrémenter reste ouvert à tout compte
-			// authentifié, car c'est ce que fait le poste de scan (rôle MAGASINIER en
-			// pratique) pendant la réception physique des montures.
+			// Créer une session de réception reste réservé à la direction/admin ; la lister,
+			// consulter un code précis et l'incrémenter sont ouverts au magasinier (rôle 3),
+			// car c'est lui qui réceptionne physiquement les montures.
+			//
+			// La lecture lui a été ouverte pour que le poste de scan puisse afficher les
+			// commandes en attente et reprendre une réception entamée depuis n'importe quel
+			// poste : sans elle, la reprise ne tenait qu'au localStorage du navigateur et
+			// changer de tablette obligeait à rescanner l'étiquette.
 			receptionCommands := inventory.Group("/reception-commands")
 			{
 				receptionCommands.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), receptionCommandHandler.Create)
-				receptionCommands.GET("", authMiddleware.RequireRoles(1, 2, 8, 12), receptionCommandHandler.List)
+				receptionCommands.GET("", authMiddleware.RequireRoles(1, 2, 3, 8, 12), receptionCommandHandler.List)
 				receptionCommands.GET("/:code", receptionCommandHandler.GetByCode)
 				receptionCommands.POST("/:code/increment", receptionCommandHandler.Increment)
 			}
