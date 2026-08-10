@@ -112,7 +112,9 @@ type proformaDisplayService interface {
 }
 
 type proformaSaleService interface {
-	CreateSale(stationID int64, barcodes []string, userID int64) (*models.Sale, error)
+	// Le second retour nomme les montures encaissées que l'envoi au Laboratoire n'a pas
+	// emportées : elles restent VENDUE et n'arriveront jamais au montage.
+	CreateSale(stationID int64, barcodes []string, userID int64) (*models.Sale, []string, error)
 }
 
 // ProformaHandler expose le document émis au Présentoir quand un client choisit des
@@ -340,11 +342,18 @@ func (h *ProformaHandler) Settle(c *gin.Context) {
 
 	// Une seule vente pour toutes les lignes encaissées : CreateSale marque VENDUE puis
 	// expédie au Laboratoire, c'est le chemin « la lunette va au laboratoire ».
+	//
+	// `labFailures` nomme celles que l'expédition n'a pas emportées — station « Laboratoire »
+	// absente, le plus souvent. La vente est bonne, mais ces montures resteront VENDUE sans
+	// jamais arriver au montage : le caissier doit le lire, pas le découvrir trois jours après.
+	var labFailures []string
 	if len(soldBarcodes) > 0 {
-		if _, err := h.saleSvc.CreateSale(proforma.StationID, soldBarcodes, userID); err != nil {
+		_, notShipped, err := h.saleSvc.CreateSale(proforma.StationID, soldBarcodes, userID)
+		if err != nil {
 			shared.InternalError(c, "Encaissement impossible : "+err.Error())
 			return
 		}
+		labFailures = notShipped
 	}
 
 	// Le client a renoncé : la monture retourne au Présentoir qui l'a proposée et y reprend
@@ -375,6 +384,7 @@ func (h *ProformaHandler) Settle(c *gin.Context) {
 		"sold":            soldBarcodes,
 		"returned":        returnedBarcodes,
 		"return_failures": returnFailures,
+		"lab_failures":    labFailures,
 		"already_settled": alreadySettled,
 	})
 }

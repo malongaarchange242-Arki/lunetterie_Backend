@@ -36,15 +36,23 @@ func NewReserveService(reserveRepo *repositories.ReserveRepository, glassRepo *r
 // automatiquement la monture vers le Laboratoire (EN_TRANSIT) pour préparation/montage avant
 // livraison. Le passage EN_TRANSIT -> EN_LABORATOIRE se fait ensuite normalement au scan sur
 // presentoir.html au poste Laboratoire (DisplayService.PlaceOnDisplay, déjà en place).
-func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int64) (*models.Sale, error) {
+//
+// Le second retour nomme les montures encaissées que l'envoi n'a pas pu emporter : elles
+// restent VENDUE, sans emplacement, et n'arriveront jamais au montage. L'appelant DOIT le
+// remonter à l'écran. Cet échec était muet — un simple avertissement dans les logs — et une
+// station « Laboratoire » absente suffisait à figer chaque vente sans que personne le voie.
+func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int64) (*models.Sale, []string, error) {
 	if len(barcodes) == 0 {
-		return nil, fmt.Errorf("aucune monture sélectionnée")
+		return nil, nil, fmt.Errorf("aucune monture sélectionnée")
 	}
 
 	sale := &models.Sale{StationID: stationID, UserID: userID}
 	if err := s.saleRepo.Create(sale); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	// Les montures encaissées que le laboratoire ne recevra pas.
+	notShipped := []string{}
 
 	var laboratoireStationID int64
 	if s.stationRepo != nil {
@@ -97,10 +105,12 @@ func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int6
 		}
 
 		if laboratoireStationID == 0 {
+			notShipped = append(notShipped, barcode)
 			continue
 		}
 		if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnTransit); err != nil {
 			log.Printf("erreur passage en transit vers le laboratoire glass #%d: %v", glass.ID, err)
+			notShipped = append(notShipped, barcode)
 			continue
 		}
 		expeditionMovement := &models.Movement{
@@ -115,7 +125,7 @@ func (s *SaleService) CreateSale(stationID int64, barcodes []string, userID int6
 		}
 	}
 
-	return sale, nil
+	return sale, notShipped, nil
 }
 
 // ReserveExpiryDays : au-delà de ce délai, une monture mise de côté repart au présentoir.

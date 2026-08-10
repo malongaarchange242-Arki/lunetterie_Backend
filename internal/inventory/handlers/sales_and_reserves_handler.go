@@ -37,13 +37,15 @@ func (h *SaleHandler) CreateSale(c *gin.Context) {
 		return
 	}
 
-	sale, err := h.service.CreateSale(req.StationID, req.Barcodes, userID)
+	sale, notShipped, err := h.service.CreateSale(req.StationID, req.Barcodes, userID)
 	if err != nil {
 		shared.BadRequest(c, err.Error())
 		return
 	}
 
-	shared.Success(c, http.StatusCreated, gin.H{"sale": sale})
+	// Les montures restées VENDUE faute d'envoi au Laboratoire partent avec la réponse :
+	// la vente est enregistrée, mais elles n'arriveront pas au montage toutes seules.
+	shared.Success(c, http.StatusCreated, gin.H{"sale": sale, "lab_failures": notShipped})
 }
 
 func (h *ReserveHandler) CreateReserve(c *gin.Context) {
