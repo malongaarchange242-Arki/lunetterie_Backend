@@ -113,6 +113,13 @@ type SendBoxItem struct {
 	// Nul tant que la monture est en transit — l'expédition libère sa case de départ et ne
 	// lui en donne pas d'autre avant d'être reçue. C'est la seule des deux que le
 	// magasinier a besoin de lire, une monture en main.
-	StockLocationCode *string   `db:"stock_location_code" json:"stock_location_code,omitempty"`
-	CreatedAt         time.Time `db:"created_at" json:"created_at"`
+	StockLocationCode *string `db:"stock_location_code" json:"stock_location_code,omitempty"`
+	// Repris de la fiche monture, pour que le pointage se fasse à l'œil : le magasinier
+	// reconnaît une monture à sa photo et à sa marque bien avant son code-barres.
+	PhotoMontureURL *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
+	Price           *float64  `db:"price" json:"price,omitempty"`
+	Brand           *string   `db:"brand" json:"brand,omitempty"`
+	Shape           *string   `db:"shape" json:"shape,omitempty"`
+	Color           *string   `db:"color" json:"color,omitempty"`
+	CreatedAt       time.Time `db:"created_at" json:"created_at"`
 }

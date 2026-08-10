@@ -278,11 +278,18 @@ func (r *SendListRepository) FindBoxByCode(code string) (*models.SendBox, error)
 // sans lui en donner d'autre. `stock_location_code` est alors nul, ce qui est exact.
 func (r *SendListRepository) FindBoxItems(boxID int64) ([]models.SendBoxItem, error) {
 	items := []models.SendBoxItem{}
+	// Les attributs de la monture voyagent avec la ligne : le carton n'en fige que la
+	// référence, or le magasinier pointe une monture qu'il a en main — il la reconnaît à sa
+	// photo et à sa marque bien avant son code-barres.
 	query := `SELECT i.id, i.box_id, i.list_item_id, i.glass_id, i.barcode, i.reference,
                  i.location_code, i.created_at,
-                 l.code AS stock_location_code
+                 l.code AS stock_location_code,
+                 g.photo_monture_url,
+                 g.price,
+                 ga.brand, ga.shape, ga.color
         FROM send_box_items i
         LEFT JOIN glasses g ON g.id = i.glass_id
+        LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
         LEFT JOIN storage_locations l ON l.id = g.location_id
         WHERE i.box_id = $1
         ORDER BY i.id ASC`
