@@ -149,6 +149,14 @@ type ProformaItemDecision struct {
 }
 
 type ProformaSettleRequest struct {
-	StationID int64                  `json:"station_id" binding:"required"`
+	// Facultatif, et volontairement : la station qui compte est celle de la proforma, pas
+	// celle du caissier. Settle n'utilise que `proforma.StationID` — pour la vente comme pour
+	// le retour au présentoir — et c'est juste : une monture doit repartir vers le présentoir
+	// qui l'a proposée, quel que soit le poste qui tranche.
+	//
+	// Le champ était `required` alors qu'il n'était jamais lu : un compte de caisse sans
+	// `station_id` — le cas courant, la caisse n'est pas rattachée à un magasin — voyait
+	// toutes ses validations refusées avec « Field validation for 'StationID' failed ».
+	StationID int64                  `json:"station_id"`
 	Decisions []ProformaItemDecision `json:"decisions" binding:"required"`
 }
