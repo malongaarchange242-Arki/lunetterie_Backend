@@ -44,27 +44,39 @@ type SendListCreateRequest struct {
 	Items       []SendListItemRequest `json:"items"`
 }
 
-// Statuts d'un carton : créé au départ du stock général, ouvert quand le magasin a scanné
-// son code-barres à l'arrivée.
+// Statuts d'un carton, dans l'ordre de son voyage :
+//
+//	CREATED — parti du stock général, montures EN_TRANSIT, pas encore vu au magasin.
+//	OPENED  — son étiquette a été scannée à l'arrivée : le pointage est en cours, et il peut
+//	          être repris autant de fois qu'il le faut (page fermée, poste changé).
+//	CLOSED  — le magasinier a clos le pointage. Les montures jamais scannées restent
+//	          EN_TRANSIT : elles n'entrent pas au stock, et `missing_count` fige l'écart.
 const (
 	SendBoxStatusCreated = "CREATED"
 	SendBoxStatusOpened  = "OPENED"
+	SendBoxStatusClosed  = "CLOSED"
 )
 
 // SendBox represents a physical carton shipped for one full send-list dispatch.
 type SendBox struct {
-	ID              int64      `db:"id" json:"id"`
-	ListID          int64      `db:"list_id" json:"list_id"`
-	Code            string     `db:"code" json:"code"`
-	Reference       string     `db:"reference" json:"reference"`
-	City            string     `db:"city" json:"city"`
-	SessionCode     string     `db:"session_code" json:"session_code"`
-	ItemCount       int        `db:"item_count" json:"item_count"`
-	Status          string     `db:"status" json:"status"`
+	ID          int64  `db:"id" json:"id"`
+	ListID      int64  `db:"list_id" json:"list_id"`
+	Code        string `db:"code" json:"code"`
+	Reference   string `db:"reference" json:"reference"`
+	City        string `db:"city" json:"city"`
+	SessionCode string `db:"session_code" json:"session_code"`
+	ItemCount   int    `db:"item_count" json:"item_count"`
+	Status      string `db:"status" json:"status"`
+	// Le transfert que ce carton transporte. C'est lui qui porte l'état de réception
+	// monture par monture (transfer_items) : le carton n'en tient pas de copie.
+	TransferID      *int64     `db:"transfer_id" json:"transfer_id,omitempty"`
 	CreatedBy       *int64     `db:"created_by" json:"created_by,omitempty"`
 	OpenedAt        *time.Time `db:"opened_at" json:"opened_at,omitempty"`
 	OpenedBy        *int64     `db:"opened_by" json:"opened_by,omitempty"`
 	OpenedStationID *int64     `db:"opened_station_id" json:"opened_station_id,omitempty"`
+	ClosedAt        *time.Time `db:"closed_at" json:"closed_at,omitempty"`
+	ClosedBy        *int64     `db:"closed_by" json:"closed_by,omitempty"`
+	MissingCount    int        `db:"missing_count" json:"missing_count"`
 	CreatedAt       time.Time  `db:"created_at" json:"created_at"`
 	UpdatedAt       time.Time  `db:"updated_at" json:"updated_at"`
 }

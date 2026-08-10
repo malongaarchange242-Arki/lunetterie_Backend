@@ -170,9 +170,11 @@ func main() {
 	demandBasketRepo := repositories.NewDemandBasketRepository(db)
 	demandBasketHandler := inventoryHandlers.NewDemandBasketHandler(demandBasketRepo)
 	sendListRepo := repositories.NewSendListRepository(db)
-	sendListDispatchSvc := services.NewSendListDispatchService(sendListRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
+	// L'expédition d'une liste et la réception de son carton s'appuient toutes deux sur le
+	// service de transfert : la première crée le transit, la seconde le clôt monture par monture.
+	sendListDispatchSvc := services.NewSendListDispatchService(sendListRepo, glassRepo, stationRepo, transferSvc)
 	sendListHandler := inventoryHandlers.NewSendListHandler(sendListRepo, sendListDispatchSvc)
-	sendBoxHandler := inventoryHandlers.NewSendBoxHandler(sendListRepo, stationRepo)
+	sendBoxHandler := inventoryHandlers.NewSendBoxHandler(sendListRepo, stationRepo, transferSvc)
 	proformaRepo := repositories.NewProformaRepository(db)
 	proformaHandler := inventoryHandlers.NewProformaHandler(proformaRepo, glassRepo, displaySvc, saleSvc)
 	claimRepo := repositories.NewClaimRepository(db)
@@ -419,7 +421,12 @@ func main() {
 				sendBoxes.GET("", sendBoxHandler.List)
 				sendBoxes.GET("/restock", sendBoxHandler.Restock)
 				sendBoxes.GET("/pending", sendBoxHandler.Pending)
+				// /open est reprenable : il rouvre un carton déjà ouvert avec l'avancement
+				// du pointage, au lieu de le condamner. /receive fait entrer une monture au
+				// stock, /close acte l'arrivée même incomplète.
 				sendBoxes.POST("/open", sendBoxHandler.Open)
+				sendBoxes.POST("/receive", sendBoxHandler.Receive)
+				sendBoxes.POST("/close", sendBoxHandler.Close)
 			}
 
 			// Proformas : émises au Présentoir quand un client choisit ses montures, puis

@@ -19,7 +19,15 @@ func NewSendListRepository(db *sqlx.DB) *SendListRepository {
 }
 
 // CreateDispatchBox persiste un carton associé à l'envoi complet d'une liste de réception.
-func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []models.SendListItem) (*models.SendBox, error) {
+// CreateDispatchBox fige le carton et son contenu.
+//
+// `items` ne doit contenir que les lignes réellement parties, pas toute la liste : c'est ce
+// contenu que le magasinier pointera à l'arrivée, et lui faire chercher une monture restée au
+// stock général le laisserait constater un manque qui n'en est pas un.
+//
+// `transferID` relie le carton au transfert qu'il transporte. C'est ce transfert qui porte
+// l'état de réception monture par monture — le carton n'en garde aucune copie.
+func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []models.SendListItem, transferID *int64) (*models.SendBox, error) {
 	if list == nil {
 		return nil, fmt.Errorf("liste invalide pour carton")
 	}
@@ -36,7 +44,8 @@ func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []mo
 		City:        list.City,
 		SessionCode: list.SessionCode,
 		ItemCount:   len(items),
-		Status:      "CREATED",
+		Status:      models.SendBoxStatusCreated,
+		TransferID:  transferID,
 	}
 
 	tx, err := r.db.Beginx()
@@ -46,8 +55,8 @@ func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []mo
 	defer func() { _ = tx.Rollback() }()
 
 	header := `
-        INSERT INTO send_boxes (list_id, code, reference, city, session_code, item_count, status, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO send_boxes (list_id, code, reference, city, session_code, item_count, status, transfer_id, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id, created_at, updated_at`
 	if err := tx.QueryRowx(header,
 		list.ID,
@@ -57,6 +66,7 @@ func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []mo
 		list.SessionCode,
 		len(items),
 		box.Status,
+		transferID,
 		list.CreatedBy,
 	).Scan(&box.ID, &box.CreatedAt, &box.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("impossible d'enregistrer le carton: %w", err)
@@ -85,7 +95,8 @@ func (r *SendListRepository) CreateDispatchBox(list *models.SendList, items []mo
 }
 
 const sendBoxColumns = `id, list_id, code, reference, city, session_code, item_count, status,
-        created_by, opened_at, opened_by, opened_station_id, created_at, updated_at`
+        transfer_id, created_by, opened_at, opened_by, opened_station_id,
+        closed_at, closed_by, missing_count, created_at, updated_at`
 
 // FindPendingBoxesByCity liste les cartons partis vers une ville et pas encore ouverts. Le
 // poste de magasin s'en sert pour savoir s'il doit réclamer un code-barres avant de travailler.
@@ -282,6 +293,27 @@ func (r *SendListRepository) MarkBoxOpened(boxID, userID, stationID int64) (int6
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("impossible de lire le résultat d'ouverture du carton %d: %w", boxID, err)
+	}
+	return affected, nil
+}
+
+// MarkBoxClosed clôt le pointage. `missing` fige ce qui manquait à cet instant : les montures
+// jamais scannées restent EN_TRANSIT, donc hors du stock du magasin, et leur ligne de transfert
+// reste ouverte — un scan plus tard les recevra encore, sans rouvrir le carton.
+//
+// La condition sur le statut rend l'appel idempotent : zéro ligne touchée signale que le carton
+// était déjà clos.
+func (r *SendListRepository) MarkBoxClosed(boxID, userID int64, missing int) (int64, error) {
+	query := `UPDATE send_boxes
+        SET status = $1, closed_at = NOW(), closed_by = $2, missing_count = $3, updated_at = NOW()
+        WHERE id = $4 AND status <> $1`
+	result, err := r.db.Exec(query, models.SendBoxStatusClosed, nullIfZero(userID), missing, boxID)
+	if err != nil {
+		return 0, fmt.Errorf("impossible de clôturer le carton %d: %w", boxID, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("impossible de lire le résultat de clôture du carton %d: %w", boxID, err)
 	}
 	return affected, nil
 }

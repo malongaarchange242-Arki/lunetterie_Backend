@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	authModels "github.com/lunetterie/backend/internal/auth/models"
@@ -14,31 +13,37 @@ import (
 // SendListDispatchService expédie une liste reçue (send_list) vers la station locale de sa
 // ville, en une seule action déclenchée par le bouton « Envoyer » du poste de scan.
 //
-// Contrairement au transfert manuel (TransferService), la destination n'est pas choisie dans
-// un menu : elle se déduit de la ville portée par la liste. Et l'envoi vaut arrivée — les
-// montures passent directement EN_STOCK_SOUS_STATION dans le stock de la station locale, sans
-// étape EN_TRANSIT ni scan de réception à destination.
+// Contrairement au transfert manuel, la destination n'est pas choisie dans un menu : elle se
+// déduit de la ville portée par la liste. Mais le voyage, lui, est un vrai transfert — les
+// montures partent EN_TRANSIT et n'entrent dans le stock du magasin qu'au pointage du carton
+// à l'arrivée (SendBoxHandler.Receive).
+//
+// Il en allait autrement jusqu'ici : l'envoi valait arrivée, les montures passaient
+// EN_STOCK_SOUS_STATION au moment même du départ. Un carton perdu en route laissait donc le
+// magasin crédité de montures qu'il n'avait jamais reçues, sans aucun moyen de s'en apercevoir.
 type SendListDispatchService struct {
 	sendListRepo *repositories.SendListRepository
 	glassRepo    *repositories.GlassRepository
-	movementRepo *repositories.MovementRepository
-	allocation   *AllocationService
 	stationRepo  *authRepositories.StationRepository
+	// Le circuit de transit est déjà écrit et éprouvé (préparation → expédition → réception
+	// monture par monture) : on s'y branche au lieu d'en tenir une seconde version ici. C'est
+	// lui qui détient désormais les emplacements et les mouvements — d'où la disparition des
+	// dépendances `allocation` et `movementRepo`, que ce service manipulait en direct du temps
+	// où il jouait l'arrivée lui-même.
+	transfers *TransferService
 }
 
 func NewSendListDispatchService(
 	sendListRepo *repositories.SendListRepository,
 	glassRepo *repositories.GlassRepository,
-	movementRepo *repositories.MovementRepository,
-	allocation *AllocationService,
 	stationRepo *authRepositories.StationRepository,
+	transfers *TransferService,
 ) *SendListDispatchService {
 	return &SendListDispatchService{
 		sendListRepo: sendListRepo,
 		glassRepo:    glassRepo,
-		movementRepo: movementRepo,
-		allocation:   allocation,
 		stationRepo:  stationRepo,
+		transfers:    transfers,
 	}
 }
 
@@ -61,6 +66,7 @@ type SendListDispatchResult struct {
 	BoxCode      string                `json:"box_code,omitempty"`
 	BoxReference string                `json:"box_reference,omitempty"`
 	BoxItemCount int                   `json:"box_item_count,omitempty"`
+	TransferID   int64                 `json:"transfer_id,omitempty"`
 }
 
 // Dispatch envoie toutes les montures d'une liste vers la station locale de sa ville.
@@ -91,21 +97,45 @@ func (s *SendListDispatchService) Dispatch(listID, fromStationID, userID int64) 
 
 	// Les montures sont résolues avant tout déplacement : une liste entièrement injouable
 	// (déjà partie, montures introuvables...) doit échouer sans rien avoir bougé.
-	glasses, skipped := s.resolveGlasses(items, fromStationID, station.ID)
-	if len(glasses) == 0 {
+	shipments, skipped := s.resolveGlasses(items, fromStationID, station.ID)
+	if len(shipments) == 0 {
 		return nil, fmt.Errorf("aucune monture de cette liste ne peut être envoyée : %s", summarizeSkipped(skipped))
 	}
 
-	sent := 0
-	for _, glass := range glasses {
-		if err := s.sendGlassToStation(glass, station.ID, userID); err != nil {
-			return nil, err
-		}
-		sent++
+	// Le voyage est un vrai transfert : préparation, puis expédition. C'est `Dispatch` qui
+	// libère les emplacements de départ, bascule les montures EN_TRANSIT et écrit le mouvement
+	// d'expédition. Aucune réception n'est créée ici — elle appartient au pointage du carton.
+	notes := fmt.Sprintf("Carton d'expédition — liste %s vers %s", list.SessionCode, list.City)
+	transfer, err := s.transfers.CreateTransfer(fromStationID, station.ID, &notes, userID)
+	if err != nil {
+		return nil, err
 	}
 
-	// On matérialise le carton de départ après la résolution et les mouvements effectifs.
-	box, err := s.sendListRepo.CreateDispatchBox(list, items)
+	sentItems := make([]models.SendListItem, 0, len(shipments))
+	for _, shipment := range shipments {
+		if _, _, err := s.transfers.AddItem(transfer.ID, shipment.glass.Barcode); err != nil {
+			// Une monture refusée par le transfert ne retient pas le carton : elle rejoint les
+			// écartées, nommée avec son motif, et les autres partent quand même.
+			skipped = append(skipped, SendListSkippedItem{
+				Reference: sendListItemLabel(shipment.item),
+				Reason:    err.Error(),
+			})
+			continue
+		}
+		sentItems = append(sentItems, shipment.item)
+	}
+	if len(sentItems) == 0 {
+		return nil, fmt.Errorf("aucune monture de cette liste ne peut être envoyée : %s", summarizeSkipped(skipped))
+	}
+
+	if _, err := s.transfers.Dispatch(transfer.ID, userID); err != nil {
+		return nil, fmt.Errorf("impossible d'expédier le carton: %w", err)
+	}
+	sent := len(sentItems)
+
+	// Le carton ne fige que ce qui est réellement parti : faire chercher au magasinier une
+	// monture restée au stock général lui ferait constater un manque qui n'en est pas un.
+	box, err := s.sendListRepo.CreateDispatchBox(list, sentItems, &transfer.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -122,16 +152,19 @@ func (s *SendListDispatchService) Dispatch(listID, fromStationID, userID int64) 
 	}
 
 	return &SendListDispatchResult{
-		StationID:    station.ID,
-		StationName:  station.Name,
-		City:         list.City,
-		SentCount:    sent,
-		Status:       string(models.StatusEnStockSousStation),
+		StationID:   station.ID,
+		StationName: station.Name,
+		City:        list.City,
+		SentCount:   sent,
+		// EN_TRANSIT, et non plus EN_STOCK_SOUS_STATION : les montures sont parties, elles ne
+		// sont pas arrivées. C'est le pointage du carton qui les fera entrer en stock.
+		Status:       string(models.StatusEnTransit),
 		Skipped:      skipped,
 		BoxID:        box.ID,
 		BoxCode:      box.Code,
 		BoxReference: box.Reference,
 		BoxItemCount: box.ItemCount,
+		TransferID:   transfer.ID,
 	}, nil
 }
 
@@ -156,11 +189,19 @@ func (s *SendListDispatchService) resolveLocalStation(city string) (*authModels.
 	return &stations[0], nil
 }
 
+// sendListShipment garde ensemble la ligne de la liste et la monture qu'elle désigne : le
+// transfert a besoin de la seconde, le carton de la première, et les dissocier ferait diverger
+// ce qui part de ce que le magasinier pointera.
+type sendListShipment struct {
+	item  models.SendListItem
+	glass *models.Glass
+}
+
 // resolveGlasses retrouve les montures physiques derrière les lignes de la liste. Le
 // code-barres prime sur glass_id : c'est lui que le magasinier vient de scanner, et glass_id
 // peut être nul (ON DELETE SET NULL sur send_list_items).
-func (s *SendListDispatchService) resolveGlasses(items []models.SendListItem, fromStationID, toStationID int64) ([]*models.Glass, []SendListSkippedItem) {
-	glasses := []*models.Glass{}
+func (s *SendListDispatchService) resolveGlasses(items []models.SendListItem, fromStationID, toStationID int64) ([]sendListShipment, []SendListSkippedItem) {
+	shipments := []sendListShipment{}
 	skipped := []SendListSkippedItem{}
 	seen := map[int64]bool{}
 
@@ -189,9 +230,9 @@ func (s *SendListDispatchService) resolveGlasses(items []models.SendListItem, fr
 		}
 
 		seen[glass.ID] = true
-		glasses = append(glasses, glass)
+		shipments = append(shipments, sendListShipment{item: item, glass: glass})
 	}
-	return glasses, skipped
+	return shipments, skipped
 }
 
 func (s *SendListDispatchService) findGlass(item models.SendListItem) (*models.Glass, error) {
@@ -204,59 +245,6 @@ func (s *SendListDispatchService) findGlass(item models.SendListItem) (*models.G
 		return s.glassRepo.GetByID(*item.GlassID)
 	}
 	return nil, fmt.Errorf("monture introuvable")
-}
-
-// sendGlassToStation libère l'emplacement d'origine, réserve un emplacement de zone STOCK à la
-// station locale et bascule la monture EN_STOCK_SOUS_STATION.
-//
-// Deux mouvements sont tracés plutôt qu'un seul : le départ (EXPEDITION) et l'arrivée
-// (RECEPTION_STATION). L'envoi les enchaîne dans la même seconde, mais l'historique du Stock
-// Général et celui du magasin restent chacun complets, exactement comme si la réception avait
-// été scannée à destination.
-func (s *SendListDispatchService) sendGlassToStation(glass *models.Glass, toStationID, userID int64) error {
-	location, err := s.allocation.FindOrCreateStockLocation(toStationID)
-	if err != nil {
-		return fmt.Errorf("impossible d'assigner un emplacement à la monture #%d dans la station locale: %w", glass.ID, err)
-	}
-
-	fromStationID := glass.StationID
-	fromLocationID := glass.LocationID
-	if fromLocationID != nil {
-		if err := s.allocation.FreeLocation(*fromLocationID); err != nil {
-			return fmt.Errorf("impossible de libérer l'emplacement de la monture #%d: %w", glass.ID, err)
-		}
-	}
-	if err := s.glassRepo.UpdateStationAndLocation(glass.ID, toStationID, location.ID); err != nil {
-		return fmt.Errorf("impossible de déplacer la monture #%d vers la station locale: %w", glass.ID, err)
-	}
-	if err := s.glassRepo.UpdateStatus(glass.ID, models.StatusEnStockSousStation); err != nil {
-		return fmt.Errorf("impossible de mettre à jour le statut de la monture #%d: %w", glass.ID, err)
-	}
-
-	departure := &models.Movement{
-		GlassID:        glass.ID,
-		FromStationID:  &fromStationID,
-		ToStationID:    &toStationID,
-		FromLocationID: fromLocationID,
-		Action:         models.ActionExpedition,
-		UserID:         userID,
-	}
-	if err := s.movementRepo.Create(departure); err != nil {
-		log.Printf("⚠️  Erreur création mouvement expédition liste (glass #%d): %v", glass.ID, err)
-	}
-
-	arrival := &models.Movement{
-		GlassID:       glass.ID,
-		FromStationID: &fromStationID,
-		ToStationID:   &toStationID,
-		ToLocationID:  &location.ID,
-		Action:        models.ActionReceptionStation,
-		UserID:        userID,
-	}
-	if err := s.movementRepo.Create(arrival); err != nil {
-		log.Printf("⚠️  Erreur création mouvement réception station liste (glass #%d): %v", glass.ID, err)
-	}
-	return nil
 }
 
 func sendListItemLabel(item models.SendListItem) string {
