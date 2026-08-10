@@ -266,13 +266,26 @@ func (r *SendListRepository) FindBoxByCode(code string) (*models.SendBox, error)
 	return &box, nil
 }
 
-// FindBoxItems renvoie le contenu annoncé du carton, tel que figé au départ.
+// FindBoxItems renvoie le contenu annoncé du carton, tel que figé au départ, augmenté de
+// l'emplacement courant de chaque monture.
+//
+// La jointure est ce qui rend le pointage utilisable : `location_code` fige la case du stock
+// général d'où la monture est partie, alors que le magasinier, monture en main, cherche où la
+// ranger chez lui. Cet emplacement-là n'est attribué qu'à la réception, et il vit sur la
+// monture — pas dans le carton, qui ne connaît que le passé.
+//
+// Une monture encore en transit n'a aucun emplacement : l'expédition libère sa case de départ
+// sans lui en donner d'autre. `stock_location_code` est alors nul, ce qui est exact.
 func (r *SendListRepository) FindBoxItems(boxID int64) ([]models.SendBoxItem, error) {
 	items := []models.SendBoxItem{}
-	query := `SELECT id, box_id, list_item_id, glass_id, barcode, reference, location_code, created_at
-        FROM send_box_items
-        WHERE box_id = $1
-        ORDER BY id ASC`
+	query := `SELECT i.id, i.box_id, i.list_item_id, i.glass_id, i.barcode, i.reference,
+                 i.location_code, i.created_at,
+                 l.code AS stock_location_code
+        FROM send_box_items i
+        LEFT JOIN glasses g ON g.id = i.glass_id
+        LEFT JOIN storage_locations l ON l.id = g.location_id
+        WHERE i.box_id = $1
+        ORDER BY i.id ASC`
 	if err := r.db.Select(&items, query, boxID); err != nil {
 		return nil, fmt.Errorf("impossible de récupérer le contenu du carton %d: %w", boxID, err)
 	}

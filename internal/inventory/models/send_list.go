@@ -100,12 +100,19 @@ type RestockSuggestion struct {
 
 // SendBoxItem stores each send-list snapshot line that is attached to a box.
 type SendBoxItem struct {
-	ID           int64     `db:"id" json:"id"`
-	BoxID        int64     `db:"box_id" json:"box_id"`
-	ListItemID   int64     `db:"list_item_id" json:"list_item_id"`
-	GlassID      *int64    `db:"glass_id" json:"glass_id,omitempty"`
-	Barcode      *string   `db:"barcode" json:"barcode,omitempty"`
-	Reference    *string   `db:"reference" json:"reference,omitempty"`
-	LocationCode *string   `db:"location_code" json:"location_code,omitempty"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	ID         int64   `db:"id" json:"id"`
+	BoxID      int64   `db:"box_id" json:"box_id"`
+	ListItemID int64   `db:"list_item_id" json:"list_item_id"`
+	GlassID    *int64  `db:"glass_id" json:"glass_id,omitempty"`
+	Barcode    *string `db:"barcode" json:"barcode,omitempty"`
+	Reference  *string `db:"reference" json:"reference,omitempty"`
+	// D'où la monture est partie, figé à l'expédition. Sans intérêt pour le magasin qui la
+	// reçoit — c'est une case du stock général.
+	LocationCode *string `db:"location_code" json:"location_code,omitempty"`
+	// Où la ranger ici : l'emplacement que la station d'arrivée lui a attribué au pointage.
+	// Nul tant que la monture est en transit — l'expédition libère sa case de départ et ne
+	// lui en donne pas d'autre avant d'être reçue. C'est la seule des deux que le
+	// magasinier a besoin de lire, une monture en main.
+	StockLocationCode *string   `db:"stock_location_code" json:"stock_location_code,omitempty"`
+	CreatedAt         time.Time `db:"created_at" json:"created_at"`
 }

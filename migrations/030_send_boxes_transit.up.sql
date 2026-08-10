@@ -1,5 +1,10 @@
 -- Réception réelle d'un carton : l'expédition ne vaut plus arrivée.
 --
+-- ⚠️  Dépend de 024_send_boxes_opening (opened_at / opened_by / opened_station_id). Les deux
+-- se lisent ensemble : toute requête sur send_boxes sélectionne les colonnes des deux
+-- migrations, et il en manque une suffit à faire échouer /pending, /open et la vue Expédition.
+-- Numérotée 030 et non 025 : trois migrations portaient déjà ce numéro (caisse, proformas).
+--
 -- Jusqu'ici, envoyer une liste faisait passer les montures EN_STOCK_SOUS_STATION dans la
 -- station destinataire au moment même du départ. Un carton perdu en route laissait donc le
 -- stock du magasin crédité de montures qu'il n'avait jamais reçues.
