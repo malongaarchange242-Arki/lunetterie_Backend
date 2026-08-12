@@ -446,9 +446,12 @@ func main() {
 				proformas.GET("/:id", proformaHandler.Get)
 				proformas.POST("/:id/settle", proformaHandler.Settle)
 			}
+			// Réclamations client. La lecture a été ajoutée après coup : sans elle le poste
+			// enregistrait des réclamations qu'aucun écran ne pouvait relire.
 			claims := inventory.Group("/claims")
 			{
 				claims.POST("", claimHandler.Create)
+				claims.GET("", claimHandler.List)
 			}
 
 			// Poste SAV : le suivi client. Il se greffe sur les proformas, qui portent
