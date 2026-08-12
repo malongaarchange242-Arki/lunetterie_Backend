@@ -26,9 +26,10 @@ import (
 func findFrontendDir() string {
 	candidates := []string{
 		os.Getenv("FRONTEND_DIR"),
+		"../Frontend_React/dist",
+		"Frontend_React/dist",
 		"../Frontend",
 		"Frontend",
-		"/Frontend",
 	}
 
 	for _, candidate := range candidates {
@@ -278,6 +279,13 @@ func main() {
 	router.StaticFile("/historique.html", filepath.Join(frontendDir, "historique.html"))
 	router.StaticFile("/historique.css", filepath.Join(frontendDir, "historique.css"))
 	router.StaticFile("/historique.js", filepath.Join(frontendDir, "historique.js"))
+	// Additional React pages supported when using Frontend_React/dist.
+	router.StaticFile("/vendeuse.html", filepath.Join(frontendDir, "vendeuse.html"))
+	router.StaticFile("/magasin.html", filepath.Join(frontendDir, "magasin.html"))
+	router.StaticFile("/caisse.html", filepath.Join(frontendDir, "caisse.html"))
+	router.StaticFile("/responsable.html", filepath.Join(frontendDir, "responsable.html"))
+	router.StaticFile("/sav.html", filepath.Join(frontendDir, "sav.html"))
+	router.StaticFile("/labo.html", filepath.Join(frontendDir, "labo.html"))
 
 	// Servi via c.Data (pas c.File/StaticFile, qui passent par http.ServeFile) : net/http
 	// redirige spécialement toute URL se terminant par "/index.html" vers "./", ce qui
