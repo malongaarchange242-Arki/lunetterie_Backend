@@ -286,7 +286,8 @@ func (r *SendListRepository) FindBoxItems(boxID int64) ([]models.SendBoxItem, er
                  l.code AS stock_location_code,
                  g.photo_monture_url,
                  g.price,
-                 ga.brand, ga.shape, ga.color
+                 g.created_at AS glass_created_at,
+                 ga.brand, ga.shape, ga.color, ga.gender
         FROM send_box_items i
         LEFT JOIN glasses g ON g.id = i.glass_id
         LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id

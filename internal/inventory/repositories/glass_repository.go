@@ -72,8 +72,11 @@ func (r *GlassRepository) GetByBarcode(barcode string) (*models.Glass, error) {
 // avec leurs attributs (référence, forme, couleur...) issus de l'analyse IA/vérification.
 func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []string) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
+	// `g.created_at` fait partie du SELECT : sans lui, `GlassListItem.CreatedAt` reste à la
+	// valeur zéro de Go et l'écran affiche « 0001-01-01 » — une date que personne ne
+	// reconnaît comme une absence.
 	query := `
-		SELECT g.id, g.barcode, g.station_id, g.status, g.price,
+		SELECT g.id, g.barcode, g.station_id, g.status, g.price, g.created_at,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
@@ -179,7 +182,7 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassListItem, error) {
 	var item models.GlassListItem
 	query := `
-		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
@@ -209,7 +212,7 @@ var availableStatuses = []string{
 func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
 	query := `
-		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price,
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code

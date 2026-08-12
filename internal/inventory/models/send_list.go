@@ -116,10 +116,15 @@ type SendBoxItem struct {
 	StockLocationCode *string `db:"stock_location_code" json:"stock_location_code,omitempty"`
 	// Repris de la fiche monture, pour que le pointage se fasse à l'œil : le magasinier
 	// reconnaît une monture à sa photo et à sa marque bien avant son code-barres.
-	PhotoMontureURL *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
-	Price           *float64  `db:"price" json:"price,omitempty"`
-	Brand           *string   `db:"brand" json:"brand,omitempty"`
-	Shape           *string   `db:"shape" json:"shape,omitempty"`
-	Color           *string   `db:"color" json:"color,omitempty"`
-	CreatedAt       time.Time `db:"created_at" json:"created_at"`
+	PhotoMontureURL *string  `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
+	Price           *float64 `db:"price" json:"price,omitempty"`
+	Brand           *string  `db:"brand" json:"brand,omitempty"`
+	Shape           *string  `db:"shape" json:"shape,omitempty"`
+	Color           *string  `db:"color" json:"color,omitempty"`
+	Gender          *string  `db:"gender" json:"gender,omitempty"`
+	// Date d'enregistrement de la MONTURE, distincte de `created_at` qui date la ligne de
+	// carton : la première dit depuis quand la monture existe, la seconde quand elle a été
+	// mise dans ce colis. C'est la première qui intéresse le pointage.
+	GlassCreatedAt *time.Time `db:"glass_created_at" json:"glass_created_at,omitempty"`
+	CreatedAt      time.Time  `db:"created_at" json:"created_at"`
 }
