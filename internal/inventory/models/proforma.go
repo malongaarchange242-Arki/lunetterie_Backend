@@ -52,8 +52,12 @@ type Proforma struct {
 type ProformaPrescription struct {
 	ProformaID int64   `db:"proforma_id" json:"proforma_id"`
 	Societe    *string `db:"societe" json:"societe,omitempty"`
-	Foyer      *string `db:"foyer" json:"foyer,omitempty"`
-	Teinte     *string `db:"teinte" json:"teinte,omitempty"`
+	// Le lien vers la fiche société, à côté du nom recopié ci-dessus. Les deux : l'un rend
+	// les proformas d'une société comptables en SQL, l'autre garde le document lisible si
+	// la société est renommée. Nul pour un particulier ou pour les proformas antérieures.
+	SocieteID *int64  `db:"societe_id" json:"societe_id,omitempty"`
+	Foyer     *string `db:"foyer" json:"foyer,omitempty"`
+	Teinte    *string `db:"teinte" json:"teinte,omitempty"`
 
 	ODSphere   *float64 `db:"od_sphere" json:"od_sphere,omitempty"`
 	ODCylindre *float64 `db:"od_cylindre" json:"od_cylindre,omitempty"`
@@ -111,8 +115,12 @@ type ProformaLineRequest struct {
 // NULL sur ce qu'il ne sait pas lire plutôt que de refuser toute la proforma.
 type ProformaPrescriptionRequest struct {
 	Societe string `json:"societe"`
-	Foyer   string `json:"foyer"`
-	Teinte  string `json:"teinte"`
+	// L'identifiant choisi dans la liste. Zéro quand le poste n'envoie rien : le nom seul
+	// reste alors accepté, les proformas des clients qui n'ont pas migré ne doivent pas
+	// être refusées pour un champ apparu après elles.
+	SocieteID int64  `json:"societe_id"`
+	Foyer     string `json:"foyer"`
+	Teinte    string `json:"teinte"`
 
 	ODSphere   string  `json:"od_sphere"`
 	ODCylindre string  `json:"od_cylindre"`

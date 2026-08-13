@@ -60,6 +60,15 @@ func optionalText(raw string) *string {
 	return &trimmed
 }
 
+// optionalID traduit « aucun choix » en NULL. Zéro est ce que renvoie un champ non transmis,
+// et l'écrire tel quel dans une clé étrangère ferait échouer l'enregistrement entier.
+func optionalID(raw int64) *int64 {
+	if raw <= 0 {
+		return nil
+	}
+	return &raw
+}
+
 func buildPrescription(req *models.ProformaPrescriptionRequest) *models.ProformaPrescription {
 	if req == nil {
 		return nil
@@ -74,8 +83,11 @@ func buildPrescription(req *models.ProformaPrescriptionRequest) *models.Proforma
 	}
 	return &models.ProformaPrescription{
 		Societe: optionalText(req.Societe),
-		Foyer:   optionalText(req.Foyer),
-		Teinte:  optionalText(req.Teinte),
+		// Zéro n'est pas un identifiant : il signifie « aucune société choisie », et la
+		// colonne est une clé étrangère — y écrire 0 ferait échouer toute la proforma.
+		SocieteID: optionalID(req.SocieteID),
+		Foyer:     optionalText(req.Foyer),
+		Teinte:    optionalText(req.Teinte),
 
 		ODSphere:   optionalDecimal(req.ODSphere),
 		ODCylindre: optionalDecimal(req.ODCylindre),

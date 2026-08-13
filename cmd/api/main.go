@@ -180,6 +180,8 @@ func main() {
 	proformaHandler := inventoryHandlers.NewProformaHandler(proformaRepo, glassRepo, displaySvc, saleSvc)
 	claimRepo := repositories.NewClaimRepository(db)
 	claimHandler := inventoryHandlers.NewClaimHandler(claimRepo)
+	societeRepo := repositories.NewSocieteRepository(db)
+	societeHandler := inventoryHandlers.NewSocieteHandler(societeRepo)
 	savFollowupRepo := repositories.NewSavFollowupRepository(db)
 	savFollowupHandler := inventoryHandlers.NewSavFollowupHandler(savFollowupRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
@@ -452,6 +454,17 @@ func main() {
 			{
 				claims.POST("", claimHandler.Create)
 				claims.GET("", claimHandler.List)
+			}
+
+			// Sociétés conventionnées. La lecture est ouverte à tout compte authentifié —
+			// c'est la liste déroulante du champ « Société » d'une proforma, la vendeuse en a
+			// besoin. L'écriture reste à la direction : une liste que chaque poste pourrait
+			// compléter retrouverait les doublons d'orthographe qu'elle sert à empêcher.
+			societes := inventory.Group("/societes")
+			{
+				societes.GET("", societeHandler.List)
+				societes.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), societeHandler.Create)
+				societes.PUT("/:id", authMiddleware.RequireRoles(1, 2, 8, 12), societeHandler.Update)
 			}
 
 			// Poste SAV : le suivi client. Il se greffe sur les proformas, qui portent

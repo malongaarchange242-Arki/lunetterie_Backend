@@ -36,7 +36,7 @@ const proformaFrom = ` FROM proformas p LEFT JOIN users u ON u.id = p.created_by
 const proformaItemColumns = `id, proforma_id, glass_id, barcode, reference, brand, shape, color,
         unit_price, offerte, outcome, settled_at, is_pending, created_at`
 
-const proformaPrescriptionColumns = `proforma_id, societe, foyer, teinte,
+const proformaPrescriptionColumns = `proforma_id, societe, societe_id, foyer, teinte,
         od_sphere, od_cylindre, od_axe, od_addition, od_prix,
         og_sphere, og_cylindre, og_axe, og_addition, og_prix,
         accessoires_label, accessoires_prix, montage_prix, remise_pct, note_libre,
@@ -137,15 +137,15 @@ func (r *ProformaRepository) Create(proforma *models.Proforma, items []models.Pr
 	if prescription != nil {
 		prescription.ProformaID = proforma.ID
 		rx := `
-        INSERT INTO proforma_prescriptions (proforma_id, societe, foyer, teinte,
+        INSERT INTO proforma_prescriptions (proforma_id, societe, societe_id, foyer, teinte,
             od_sphere, od_cylindre, od_axe, od_addition, od_prix,
             og_sphere, og_cylindre, og_axe, og_addition, og_prix,
             accessoires_label, accessoires_prix, montage_prix, remise_pct, note_libre)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
         RETURNING created_at, updated_at`
 		if err := tx.QueryRowx(rx,
 			prescription.ProformaID,
-			prescription.Societe, prescription.Foyer, prescription.Teinte,
+			prescription.Societe, prescription.SocieteID, prescription.Foyer, prescription.Teinte,
 			prescription.ODSphere, prescription.ODCylindre, prescription.ODAxe, prescription.ODAddition, prescription.ODPrix,
 			prescription.OGSphere, prescription.OGCylindre, prescription.OGAxe, prescription.OGAddition, prescription.OGPrix,
 			prescription.AccessoiresLabel, prescription.AccessoiresPrix, prescription.MontagePrix, prescription.RemisePct, prescription.NoteLibre,
