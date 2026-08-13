@@ -20,20 +20,24 @@ const (
 // Proforma : le document émis au Présentoir quand un client choisit des montures. Les
 // montures qu'elle porte sont bloquées jusqu'à l'arbitrage de la Caisse.
 type Proforma struct {
-	ID          int64          `db:"id" json:"id"`
-	Code        string         `db:"code" json:"code"`
-	StationID   int64          `db:"station_id" json:"station_id"`
-	ClientName  string         `db:"client_name" json:"client_name"`
-	ClientPhone *string        `db:"client_phone" json:"client_phone,omitempty"`
-	TotalAmount float64        `db:"total_amount" json:"total_amount"`
-	Status      string         `db:"status" json:"status"`
-	Note        *string        `db:"note" json:"note,omitempty"`
-	CreatedBy   *int64         `db:"created_by" json:"created_by,omitempty"`
-	SettledBy   *int64         `db:"settled_by" json:"settled_by,omitempty"`
-	SettledAt   *time.Time     `db:"settled_at" json:"settled_at,omitempty"`
-	CreatedAt   time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time      `db:"updated_at" json:"updated_at"`
-	Items       []ProformaItem `db:"-" json:"items,omitempty"`
+	ID          int64   `db:"id" json:"id"`
+	Code        string  `db:"code" json:"code"`
+	StationID   int64   `db:"station_id" json:"station_id"`
+	ClientName  string  `db:"client_name" json:"client_name"`
+	ClientPhone *string `db:"client_phone" json:"client_phone,omitempty"`
+	TotalAmount float64 `db:"total_amount" json:"total_amount"`
+	Status      string  `db:"status" json:"status"`
+	Note        *string `db:"note" json:"note,omitempty"`
+	CreatedBy   *int64  `db:"created_by" json:"created_by,omitempty"`
+	// Le nom de l'auteur, résolu à la lecture par jointure sur `users`. Sans lui, l'écran
+	// n'a qu'un identifiant : /auth/users est fermé aux postes magasin, ils ne peuvent pas
+	// le traduire eux-mêmes. Nul quand la proforma est antérieure au suivi de l'auteur.
+	CreatedByName *string        `db:"created_by_name" json:"created_by_name,omitempty"`
+	SettledBy     *int64         `db:"settled_by" json:"settled_by,omitempty"`
+	SettledAt     *time.Time     `db:"settled_at" json:"settled_at,omitempty"`
+	CreatedAt     time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time      `db:"updated_at" json:"updated_at"`
+	Items         []ProformaItem `db:"-" json:"items,omitempty"`
 	// Chargée seulement par Get : la Caisse liste des en-têtes, elle n'a que faire de
 	// l'axe de l'œil gauche.
 	Prescription *ProformaPrescription `db:"-" json:"prescription,omitempty"`
@@ -76,22 +80,22 @@ type ProformaPrescription struct {
 // ProformaItem recopie les attributs de la monture au moment de l'émission : le document
 // doit rester lisible même si la monture est vendue, déplacée ou supprimée ensuite.
 type ProformaItem struct {
-	ID         int64      `db:"id" json:"id"`
-	ProformaID int64      `db:"proforma_id" json:"proforma_id"`
-	GlassID    *int64     `db:"glass_id" json:"glass_id,omitempty"`
-	Barcode    *string    `db:"barcode" json:"barcode,omitempty"`
-	Reference  *string    `db:"reference" json:"reference,omitempty"`
-	Brand      *string    `db:"brand" json:"brand,omitempty"`
-	Shape      *string    `db:"shape" json:"shape,omitempty"`
-	Color      *string    `db:"color" json:"color,omitempty"`
-	UnitPrice  float64    `db:"unit_price" json:"unit_price"`
+	ID         int64   `db:"id" json:"id"`
+	ProformaID int64   `db:"proforma_id" json:"proforma_id"`
+	GlassID    *int64  `db:"glass_id" json:"glass_id,omitempty"`
+	Barcode    *string `db:"barcode" json:"barcode,omitempty"`
+	Reference  *string `db:"reference" json:"reference,omitempty"`
+	Brand      *string `db:"brand" json:"brand,omitempty"`
+	Shape      *string `db:"shape" json:"shape,omitempty"`
+	Color      *string `db:"color" json:"color,omitempty"`
+	UnitPrice  float64 `db:"unit_price" json:"unit_price"`
 	// Monture offerte : dit explicitement pourquoi UnitPrice vaut 0, qu'on ne peut pas
 	// distinguer autrement d'un prix simplement non renseigné sur la fiche.
-	Offerte bool    `db:"offerte" json:"offerte"`
-	Outcome *string `db:"outcome" json:"outcome,omitempty"`
-	SettledAt  *time.Time `db:"settled_at" json:"settled_at,omitempty"`
-	IsPending  bool       `db:"is_pending" json:"is_pending"`
-	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
+	Offerte   bool       `db:"offerte" json:"offerte"`
+	Outcome   *string    `db:"outcome" json:"outcome,omitempty"`
+	SettledAt *time.Time `db:"settled_at" json:"settled_at,omitempty"`
+	IsPending bool       `db:"is_pending" json:"is_pending"`
+	CreatedAt time.Time  `db:"created_at" json:"created_at"`
 }
 
 // ProformaLineRequest : une monture de la proforma. Remplace l'ancien envoi d'un simple

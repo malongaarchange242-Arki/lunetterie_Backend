@@ -19,8 +19,19 @@ func NewProformaRepository(db *sqlx.DB) *ProformaRepository {
 	return &ProformaRepository{db: db}
 }
 
-const proformaColumns = `id, code, station_id, client_name, client_phone, total_amount, status,
-        note, created_by, settled_by, settled_at, created_at, updated_at`
+// Les colonnes sont préfixées depuis que la jointure sur `users` accompagne la lecture :
+// `id` seul serait ambigu entre les deux tables.
+const proformaColumns = `p.id, p.code, p.station_id, p.client_name, p.client_phone, p.total_amount,
+        p.status, p.note, p.created_by, p.settled_by, p.settled_at, p.created_at, p.updated_at,
+        NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), '') AS created_by_name`
+
+// `created_by` ne porte qu'un identifiant, et le poste Caisse ne peut pas le traduire lui-même :
+// /auth/users est réservé aux rôles 1, 2, 8 et 12, et un caissier (rôle 9) y prendrait un 403 —
+// que le front traite en déconnexion. Le nom doit donc voyager avec la proforma.
+//
+// LEFT JOIN et non JOIN : `created_by` est nullable (les proformas antérieures à la migration
+// qui l'a ajouté n'en ont pas), et un auteur inconnu ne doit pas faire disparaître le document.
+const proformaFrom = ` FROM proformas p LEFT JOIN users u ON u.id = p.created_by`
 
 const proformaItemColumns = `id, proforma_id, glass_id, barcode, reference, brand, shape, color,
         unit_price, offerte, outcome, settled_at, is_pending, created_at`
@@ -169,13 +180,13 @@ func (r *ProformaRepository) GetPrescription(proformaID int64) (*models.Proforma
 // d'abord : la Caisse traite ce qui vient d'arriver.
 func (r *ProformaRepository) List(status string) ([]models.Proforma, error) {
 	proformas := []models.Proforma{}
-	query := `SELECT ` + proformaColumns + ` FROM proformas`
+	query := `SELECT ` + proformaColumns + proformaFrom
 	args := []interface{}{}
 	if status != "" {
-		query += ` WHERE status = $1`
+		query += ` WHERE p.status = $1`
 		args = append(args, status)
 	}
-	query += ` ORDER BY created_at DESC`
+	query += ` ORDER BY p.created_at DESC`
 	if err := r.db.Select(&proformas, query, args...); err != nil {
 		return nil, fmt.Errorf("impossible de récupérer les proformas: %w", err)
 	}
@@ -184,7 +195,7 @@ func (r *ProformaRepository) List(status string) ([]models.Proforma, error) {
 
 func (r *ProformaRepository) GetByID(id int64) (*models.Proforma, error) {
 	var proforma models.Proforma
-	query := `SELECT ` + proformaColumns + ` FROM proformas WHERE id = $1`
+	query := `SELECT ` + proformaColumns + proformaFrom + ` WHERE p.id = $1`
 	if err := r.db.Get(&proforma, query, id); err != nil {
 		return nil, fmt.Errorf("proforma introuvable: %w", err)
 	}
