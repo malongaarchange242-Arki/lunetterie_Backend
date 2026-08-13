@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -11,11 +13,27 @@ import (
 // GlassRepository gère les opérations sur les montures
 type GlassRepository struct {
 	db *sqlx.DB
+	// onStatusChanged est prévenu après chaque changement de statut, avec la station de la
+	// monture. Voir SetStatusObserver.
+	onStatusChanged func(stationID int64)
 }
 
 // NewGlassRepository crée une nouvelle instance
 func NewGlassRepository(db *sqlx.DB) *GlassRepository {
 	return &GlassRepository{db: db}
+}
+
+// SetStatusObserver branche un observateur sur les changements de statut.
+//
+// Le contrôle du seuil de stock est posé ici plutôt qu'aux appelants parce que UpdateStatus
+// est le passage obligé de toutes les mutations : neuf sites répartis dans cinq services
+// (display, sales_and_reserves, transfer, delivery) y aboutissent. Les instrumenter un par
+// un marcherait aujourd'hui et laisserait passer le dixième, écrit demain.
+//
+// L'observateur est appelé après que la mise à jour a pris, et son échec n'est pas remonté :
+// le déplacement de la monture est acquis, une alerte manquée ne doit pas le défaire.
+func (r *GlassRepository) SetStatusObserver(observer func(stationID int64)) {
+	r.onStatusChanged = observer
 }
 
 // Create crée une nouvelle monture
@@ -229,13 +247,43 @@ func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.Glas
 }
 
 // UpdateStatus met à jour le statut d'une monture
+//
+// RETURNING plutôt qu'une seconde lecture : la station doit être celle sur laquelle la
+// mutation vient de porter, et un SELECT séparé pourrait tomber après qu'un transfert
+// concurrent l'a déjà déplacée.
+//
+// La jointure sur `previous` rend le statut d'avant : la clause FROM lit l'instantané
+// antérieur à la mise à jour. Il sert à écarter les mutations sans effet sur les compteurs
+// surveillés — sans ce filtre, l'expédition d'un carton de cinquante montures déclencherait
+// cinquante contrôles de seuil pour des statuts qui ne comptent ni au présentoir ni au
+// stock local.
 func (r *GlassRepository) UpdateStatus(glassID int64, status models.GlassStatus) error {
 	query := `
-		UPDATE glasses 
-		SET status = $1, updated_at = NOW() 
-		WHERE id = $2`
-	_, err := r.db.Exec(query, status, glassID)
-	return err
+		UPDATE glasses g
+		SET status = $1, updated_at = NOW()
+		FROM glasses previous
+		WHERE g.id = $2 AND previous.id = g.id
+		RETURNING g.station_id, previous.status`
+
+	var stationID sql.NullInt64
+	var previousStatus string
+	if err := r.db.QueryRowx(query, status, glassID).Scan(&stationID, &previousStatus); err != nil {
+		// Aucune ligne : la monture n'existe pas. L'ancien Exec restait muet dans ce cas,
+		// on garde ce silence pour ne pas transformer en erreur ce que les appelants
+		// traitaient jusqu'ici comme un succès.
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	// Les deux sens comptent : une monture qui entre en présentoir le garnit, une qui en
+	// sort le vide. Ne regarder que le statut d'arrivée manquerait la moitié des baisses.
+	touchesStock := models.TracksStock(status) || models.TracksStock(models.GlassStatus(previousStatus))
+	if r.onStatusChanged != nil && stationID.Valid && touchesStock {
+		r.onStatusChanged(stationID.Int64)
+	}
+	return nil
 }
 
 // UpdateLocation met à jour l'emplacement d'une monture

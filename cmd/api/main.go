@@ -180,6 +180,22 @@ func main() {
 	proformaHandler := inventoryHandlers.NewProformaHandler(proformaRepo, glassRepo, displaySvc, saleSvc)
 	claimRepo := repositories.NewClaimRepository(db)
 	claimHandler := inventoryHandlers.NewClaimHandler(claimRepo)
+	notificationRepo := repositories.NewNotificationRepository(db)
+	notificationHandler := inventoryHandlers.NewNotificationHandler(notificationRepo)
+
+	// Alerte de stock à 10 %. Branchée sur le dépôt des montures plutôt que sur chaque
+	// service : UpdateStatus est le passage obligé des neuf mutations de statut, l'accrocher
+	// là couvre aussi celles qui seront écrites plus tard.
+	//
+	// L'erreur est journalisée et non remontée : la monture a déjà changé de statut quand
+	// l'observateur s'exécute, et faire échouer une vente parce qu'une notification n'est
+	// pas partie serait un remède pire que le mal.
+	stockAlertSvc := services.NewStockAlertService(notificationRepo)
+	glassRepo.SetStatusObserver(func(stationID int64) {
+		if err := stockAlertSvc.CheckStation(stationID); err != nil {
+			log.Printf("alerte de stock station %d: %v", stationID, err)
+		}
+	})
 	societeRepo := repositories.NewSocieteRepository(db)
 	societeHandler := inventoryHandlers.NewSocieteHandler(societeRepo)
 	barcodeHandler := inventoryHandlers.NewBarcodeHandler(barcodeSvc)
@@ -455,6 +471,16 @@ func main() {
 			{
 				claims.POST("", claimHandler.Create)
 				claims.GET("", claimHandler.List)
+			}
+
+			// Notifications. En lecture seule : elles ne s'écrivent pas depuis l'extérieur,
+			// c'est le backend qui les produit quand un stock franchit son seuil. Aucun
+			// filtre de rôle — chacun ne voit que les siennes, l'identifiant vient du jeton.
+			notifications := inventory.Group("/notifications")
+			{
+				notifications.GET("", notificationHandler.List)
+				notifications.POST("/read-all", notificationHandler.MarkAllRead)
+				notifications.POST("/:id/read", notificationHandler.MarkRead)
 			}
 
 			// Sociétés conventionnées. La lecture est ouverte à tout compte authentifié —
