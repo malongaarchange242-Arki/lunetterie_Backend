@@ -190,9 +190,9 @@ func main() {
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
 	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
 	// Delivery handler
-	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo)
+	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo, deliveryRepo)
 	saleHandler := inventoryHandlers.NewSaleHandler(saleSvc)
-	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc)
+	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc, reserveRepo)
 	presentoirHandler := inventoryHandlers.NewPresentoirHandler(locationRepo, displaySvc)
 	movementHandler := inventoryHandlers.NewMovementHandler(movementRepo)
 	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc)
@@ -529,7 +529,13 @@ func main() {
 			{
 				// POST /api/v1/inventory/deliveries
 				// body: { station_id, barcodes: [...] }
+				// Le bouton du Laboratoire : « montage terminé » (→ PRETE_A_LIVRER).
 				deliveries.POST("", deliveryHandler.CreateDelivery)
+				// Le bouton de la Vendeuse : « le client est reparti avec » (→ LIVREE).
+				// Deux gestes distincts, deux routes : les confondre reviendrait à sortir du
+				// magasin une monture que le labo vient à peine de finir.
+				deliveries.POST("/handover", deliveryHandler.Handover)
+				deliveries.GET("", deliveryHandler.List)
 			}
 
 			sales := inventory.Group("/sales")
@@ -539,6 +545,10 @@ func main() {
 			reserves := inventory.Group("/reserves")
 			{
 				reserves.POST("", reserveHandler.CreateReserve)
+				// La lecture manquait : la réserve ne se voyait qu'à travers le statut de la
+				// monture, ce qui efface toute réservation passée et prive du seul endroit
+				// où la date de mise de côté est enregistrée.
+				reserves.GET("", reserveHandler.List)
 			}
 			presentoir := inventory.Group("/presentoir")
 			{

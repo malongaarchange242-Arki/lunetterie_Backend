@@ -51,6 +51,64 @@ func (r *DeliveryRepository) AddItem(item *models.DeliveryItem) error {
 	return fmt.Errorf("aucun ID retourné après ajout delivery item")
 }
 
+// MarkHandedOver horodate la remise sur la ligne de livraison de cette monture.
+//
+// La plus récente seulement : une monture peut avoir été montée, remise, puis revenue en
+// SAV et remontée. Sans ce garde-fou, une nouvelle remise réécrirait la date de l'ancienne.
+func (r *DeliveryRepository) MarkHandedOver(glassID int64) error {
+	query := `
+        UPDATE delivery_items
+        SET handed_over_at = NOW()
+        WHERE id = (
+            SELECT id FROM delivery_items
+            WHERE glass_id = $1 AND handed_over_at IS NULL
+            ORDER BY id DESC
+            LIMIT 1
+        )`
+	if _, err := r.db.Exec(query, glassID); err != nil {
+		return fmt.Errorf("erreur horodatage de la remise: %w", err)
+	}
+	return nil
+}
+
+// List rend les lignes de livraison, de la plus récente à la plus ancienne.
+//
+// Le pendant en lecture manquait : les tables deliveries / delivery_items se remplissaient
+// depuis le poste Laboratoire sans qu'aucune route ne permette de les relire. Le montage
+// terminé, la remise et son horodatage n'existaient donc que dans la base.
+//
+// `pendingOnly` ne garde que ce qui attend encore son client — la question que pose le
+// poste Vendeuse à chaque ouverture.
+func (r *DeliveryRepository) List(stationID int64, pendingOnly bool) ([]models.DeliveryLine, error) {
+	lines := []models.DeliveryLine{}
+
+	query := `
+        SELECT di.id, di.delivery_id, di.glass_id, di.handed_over_at,
+            g.barcode, g.status, g.price,
+            ga.reference, ga.brand, ga.shape, ga.color,
+            d.station_id, d.received_at
+        FROM delivery_items di
+        JOIN deliveries d ON d.id = di.delivery_id
+        JOIN glasses g ON g.id = di.glass_id
+        LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+        WHERE 1=1`
+
+	args := []interface{}{}
+	if stationID > 0 {
+		args = append(args, stationID)
+		query += fmt.Sprintf(" AND d.station_id = $%d", len(args))
+	}
+	if pendingOnly {
+		query += " AND di.handed_over_at IS NULL"
+	}
+	query += " ORDER BY di.id DESC"
+
+	if err := r.db.Select(&lines, query, args...); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les livraisons: %w", err)
+	}
+	return lines, nil
+}
+
 func (r *DeliveryRepository) FindOrCreateDefaultSupplier() (int64, error) {
 	const defaultName = "Livraison laboratoire"
 	var supplierID int64

@@ -30,6 +30,31 @@ type ReserveItem struct {
 	GlassID   int64 `db:"glass_id" json:"glass_id"`
 }
 
+// ReserveLine : une mise en réserve telle qu'on la lit, la monture jointe.
+//
+// `ReservedAt` est la vraie date de mise de côté. Elle a son importance : faute de cette
+// lecture, les écrans calculaient l'ancienneté d'une réserve depuis `updated_at` de la
+// monture — c'est-à-dire depuis n'importe quelle modification, et non depuis la mise de
+// côté. Le délai de dix jours se comptait donc à partir de la mauvaise date.
+type ReserveLine struct {
+	ID        int64 `db:"id" json:"id"`
+	ReserveID int64 `db:"reserve_id" json:"reserve_id"`
+	GlassID   int64 `db:"glass_id" json:"glass_id"`
+
+	StationID  int64     `db:"station_id" json:"station_id"`
+	UserID     int64     `db:"user_id" json:"user_id"`
+	ReservedAt time.Time `db:"reserved_at" json:"reserved_at"`
+
+	Barcode string   `db:"barcode" json:"barcode"`
+	Status  string   `db:"status" json:"status"`
+	Price   *float64 `db:"price" json:"price,omitempty"`
+
+	Reference *string `db:"reference" json:"reference,omitempty"`
+	Brand     *string `db:"brand" json:"brand,omitempty"`
+	Shape     *string `db:"shape" json:"shape,omitempty"`
+	Color     *string `db:"color" json:"color,omitempty"`
+}
+
 // ExpiredReserve : une monture encore RESERVEE dont la mise de côté a dépassé le délai.
 // UserID est celui qui avait posé la réservation : une tâche automatique n'a pas
 // d'utilisateur courant, et un mouvement sans auteur est refusé par la base.

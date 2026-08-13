@@ -77,6 +77,45 @@ func (r *ReserveRepository) Create(reserve *models.Reserve) error {
 	return fmt.Errorf("aucun ID retourné après création reserve")
 }
 
+// List rend les mises en réserve, de la plus récente à la plus ancienne, avec la monture.
+//
+// Le pendant en lecture manquait : les tables reserves / reserve_items se remplissaient
+// sans qu'aucune route ne permette de les relire. La réserve ne se voyait donc qu'à travers
+// le statut RESERVEE de la monture — ce qui efface toute réservation passée dès que la
+// monture repart, et interdit de savoir qui avait mis quoi de côté, et quand.
+//
+// `activeOnly` ne garde que les montures encore réservées aujourd'hui.
+func (r *ReserveRepository) List(stationID int64, activeOnly bool) ([]models.ReserveLine, error) {
+	lines := []models.ReserveLine{}
+
+	query := `
+        SELECT ri.id, ri.reserve_id, ri.glass_id,
+            res.station_id, res.user_id, res.created_at AS reserved_at,
+            g.barcode, g.status, g.price,
+            ga.reference, ga.brand, ga.shape, ga.color
+        FROM reserve_items ri
+        JOIN reserves res ON res.id = ri.reserve_id
+        JOIN glasses g ON g.id = ri.glass_id
+        LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+        WHERE 1=1`
+
+	args := []interface{}{}
+	if stationID > 0 {
+		args = append(args, stationID)
+		query += fmt.Sprintf(" AND res.station_id = $%d", len(args))
+	}
+	if activeOnly {
+		args = append(args, models.StatusReservee)
+		query += fmt.Sprintf(" AND g.status = $%d", len(args))
+	}
+	query += " ORDER BY res.created_at DESC, ri.id DESC"
+
+	if err := r.db.Select(&lines, query, args...); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les réserves: %w", err)
+	}
+	return lines, nil
+}
+
 // FindExpired liste les montures encore réservées dont la mise de côté remonte à plus de
 // `days` jours. La date de référence est celle de la réservation, jamais celle de la monture.
 //
