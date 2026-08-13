@@ -182,6 +182,7 @@ func main() {
 	claimHandler := inventoryHandlers.NewClaimHandler(claimRepo)
 	societeRepo := repositories.NewSocieteRepository(db)
 	societeHandler := inventoryHandlers.NewSocieteHandler(societeRepo)
+	barcodeHandler := inventoryHandlers.NewBarcodeHandler(barcodeSvc)
 	savFollowupRepo := repositories.NewSavFollowupRepository(db)
 	savFollowupHandler := inventoryHandlers.NewSavFollowupHandler(savFollowupRepo)
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
@@ -474,6 +475,10 @@ func main() {
 				sav.GET("/followups", savFollowupHandler.List)
 				sav.PUT("/followups/:proformaId", savFollowupHandler.Save)
 			}
+			// Réserve le prochain code-barres pour l'aperçu de l'étiquette. Réservé à ceux
+			// qui enregistrent : chaque appel consomme un numéro de la séquence, l'ouvrir à
+			// tout compte authentifié laisserait n'importe quel écran en brûler.
+			inventory.GET("/barcodes/next", authMiddleware.RequireRoles(1, 2, 3, 8, 12), barcodeHandler.Next)
 			inventory.POST("/reception", receptionHandler.HandleReception)
 			// Créer une session de réception reste réservé à la direction/admin ; la lister,
 			// consulter un code précis et l'incrémenter sont ouverts au magasinier (rôle 3),

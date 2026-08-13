@@ -12,6 +12,10 @@ type ReceptionRequest struct {
 	Gamme                *string  `json:"gamme" form:"gamme"`
 	ReceptionCommandID   *int64   `json:"reception_command_id" form:"reception_command_id"`
 	ReceptionCommandCode *string  `json:"reception_command_code" form:"reception_command_code"`
+	// Code-barres réservé d'avance par GET /inventory/barcodes/next, pour que l'aperçu de
+	// l'étiquette montre le vrai numéro au lieu d'un numéro de convenance. Facultatif : sans
+	// lui le workflow en génère un, comme il l'a toujours fait.
+	Barcode *string `json:"barcode" form:"barcode"`
 	// Champs saisis/corrigés manuellement (étape de vérification) : prioritaires sur l'analyse IA.
 	Reference *string `json:"reference" form:"reference"`
 	Brand     *string `json:"brand" form:"brand"`

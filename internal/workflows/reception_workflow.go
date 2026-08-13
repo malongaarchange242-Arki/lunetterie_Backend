@@ -13,6 +13,15 @@ import (
 	"github.com/lunetterie/backend/internal/inventory/services"
 )
 
+// derefString rend la chaîne pointée, ou vide si le pointeur est nul — les champs
+// facultatifs du formulaire de réception arrivent tous en pointeurs.
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 // ReceptionWorkflow orchestrate le workflow complet de réception
 type ReceptionWorkflow struct {
 	allocationService    *services.AllocationService
@@ -77,13 +86,31 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 	analysisResult := buildAnalysisResult(req)
 
-	// Étape: Générer un code-barres unique
-	log.Println("🏷️  Génération code-barres...")
-	barcode, err := w.barcodeService.GenerateBarcode()
-	if err != nil {
-		return nil, fmt.Errorf("erreur code-barres: %w", err)
+	// Étape: Générer un code-barres unique — sauf si le poste en a déjà réservé un.
+	//
+	// Le scan affiche l'étiquette avant d'enregistrer : sans code réservé, il y montrait un
+	// numéro tiré au hasard, sans rapport avec celui qui allait être attribué. Le poste
+	// demande donc son numéro d'avance et le renvoie ici.
+	//
+	// Un code déjà porté par une monture est ignoré au profit d'un neuf : deux étiquettes
+	// identiques rendraient deux montures indiscernables au scan, et mieux vaut un aperçu
+	// démenti qu'un doublon en rayon. Le poste réaffiche de toute façon le code retenu.
+	barcode := strings.ToUpper(strings.TrimSpace(derefString(req.Barcode)))
+	if barcode != "" {
+		if existing, err := w.glassRepo.GetByBarcode(barcode); err == nil && existing != nil {
+			log.Printf("⚠️  Code-barres réservé %s déjà attribué, un nouveau est généré", barcode)
+			barcode = ""
+		}
 	}
-	log.Printf("✅ Code-barres généré: %s", barcode)
+	if barcode == "" {
+		log.Println("🏷️  Génération code-barres...")
+		generated, err := w.barcodeService.GenerateBarcode()
+		if err != nil {
+			return nil, fmt.Errorf("erreur code-barres: %w", err)
+		}
+		barcode = generated
+	}
+	log.Printf("✅ Code-barres retenu: %s", barcode)
 
 	// Étape: Envoyer les photos dans le bucket Supabase Storage
 	log.Println("📤 Upload des photos...")
