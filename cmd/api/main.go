@@ -137,7 +137,7 @@ func main() {
 	reserveRepo := repositories.NewReserveRepository(db)
 	saleSvc := services.NewSaleService(saleRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	reserveSvc := services.NewReserveService(reserveRepo, glassRepo, movementRepo, allocationSvc)
-	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo, userRepo)
+	displaySvc := services.NewDisplayService(glassRepo, movementRepo, allocationSvc, stationRepo, transferRepo, userRepo, locationRepo)
 	storageSvc := services.NewStorageService(os.Getenv("SUPABASE_URL"), os.Getenv("SUPABASE_SERVICE_ROLE_KEY"), "glasses-photos")
 	aiSvc := services.NewAIService(aiServiceURL)
 	similaritySvc := services.NewSimilarityService(glassRepo)
@@ -541,6 +541,10 @@ func main() {
 				// POST /api/v1/inventory/presentoir/send-to-caisse
 				// body: { station_id, barcodes: [...] }
 				presentoir.POST("/send-to-caisse", presentoirHandler.SendToCaisse)
+				// Le casier choisi à la main, quand la vendeuse range la monture ailleurs que
+				// dans celui retenu automatiquement à la réception.
+				// body: { station_id, barcode, location_code }
+				presentoir.POST("/assign-slot", presentoirHandler.AssignSlot)
 			}
 			inventory.GET("/movements", movementHandler.ListMovements)
 		}

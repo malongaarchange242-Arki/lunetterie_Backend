@@ -38,6 +38,53 @@ func (r *LocationRepository) UpdateStatus(locationID int64, status string) error
 	return err
 }
 
+// FindOrCreatePresentoirByCode retrouve un casier de présentoir par son code (« PR01-1 »),
+// et le crée s'il n'existe pas encore.
+//
+// La création est volontaire : les casiers ne sont pas tous générés d'avance — l'allocation
+// automatique les fabrique elle-même au fil de l'eau (allocation_service.go
+// findOrCreateLocation). Refuser un code absent obligerait à peupler la table à la main
+// avant de pouvoir désigner un casier physiquement existant.
+//
+// Le statut n'est pas touché ici : c'est l'appelant qui décide de l'occuper, une fois qu'il
+// a vérifié que le casier était libre.
+func (r *LocationRepository) FindOrCreatePresentoirByCode(stationID int64, code string) (*models.StorageLocation, error) {
+	var location models.StorageLocation
+
+	query := `
+		SELECT id, station_id, code, type, zone, status
+		FROM storage_locations
+		WHERE station_id = $1 AND zone = 'PRESENTOIR' AND UPPER(TRIM(code)) = $2`
+	if err := r.db.Get(&location, query, stationID, code); err == nil {
+		return &location, nil
+	}
+
+	insert := `
+		INSERT INTO storage_locations (station_id, zone, code, type, status)
+		VALUES ($1, 'PRESENTOIR', $2, 'POSITION', 'LIBRE')
+		ON CONFLICT (station_id, zone, code) DO UPDATE SET code = EXCLUDED.code
+		RETURNING id, station_id, code, type, zone, status`
+	if err := r.db.Get(&location, insert, stationID, code); err != nil {
+		return nil, fmt.Errorf("impossible de créer le casier %s: %w", code, err)
+	}
+	return &location, nil
+}
+
+// FindGlassBarcodeAtLocation dit quelle monture occupe un casier. Chaîne vide s'il est libre.
+// Sert à refuser un casier déjà pris en nommant l'occupant : « PR01-1 est déjà occupé par
+// LUN-CNG-0004 » oriente, là où « casier occupé » oblige à aller regarder.
+func (r *LocationRepository) FindGlassBarcodeAtLocation(locationID int64) (string, error) {
+	barcodes := []string{}
+	query := `SELECT barcode FROM glasses WHERE location_id = $1 LIMIT 1`
+	if err := r.db.Select(&barcodes, query, locationID); err != nil {
+		return "", fmt.Errorf("impossible de lire l'occupant du casier: %w", err)
+	}
+	if len(barcodes) == 0 {
+		return "", nil
+	}
+	return barcodes[0], nil
+}
+
 // FindEmptyPresentoirSlotsToday liste les emplacements de la zone PRESENTOIR d'une station qui
 // sont actuellement libres ET ont été libérés aujourd'hui suite à une vente, une réserve ou un
 // envoi en caisse (pas un simple emplacement jamais utilisé), avec la monture qui les occupait

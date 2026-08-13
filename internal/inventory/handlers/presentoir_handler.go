@@ -41,6 +41,37 @@ func (h *PresentoirHandler) EmptySlotsToday(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"slots": slots})
 }
 
+// AssignSlot pose une monture dans un casier désigné (« PR01-1 ») plutôt que dans celui que
+// l'attribution automatique a retenu à la réception.
+// POST /api/v1/inventory/presentoir/assign-slot
+// body: { station_id, barcode, location_code }
+func (h *PresentoirHandler) AssignSlot(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		StationID    int64  `json:"station_id" binding:"required"`
+		Barcode      string `json:"barcode" binding:"required"`
+		LocationCode string `json:"location_code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Données invalides: "+err.Error())
+		return
+	}
+
+	location, err := h.displaySvc.AssignPresentoirSlot(req.Barcode, req.StationID, req.LocationCode, userID)
+	if err != nil {
+		// Le service nomme le refus (casier occupé par telle monture, mauvais statut) :
+		// c'est ce message que l'écran doit montrer, pas un « erreur » générique.
+		shared.BadRequest(c, err.Error())
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{"location": location})
+}
+
 // SendToCaisse envoie au comptoir d'encaissement les montures sélectionnées sur le présentoir
 // (EN_PRESENTOIR -> EN_CAISSE, même station).
 // POST /api/v1/inventory/presentoir/send-to-caisse

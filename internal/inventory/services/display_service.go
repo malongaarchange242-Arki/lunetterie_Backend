@@ -18,11 +18,93 @@ type DisplayService struct {
 	stationRepo  *authRepositories.StationRepository
 	transferRepo *repositories.TransferRepository
 	userRepo     *authRepositories.UserRepository
+	locationRepo *repositories.LocationRepository
 }
 
 // NewDisplayService crée une nouvelle instance
-func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService, stationRepo *authRepositories.StationRepository, transferRepo *repositories.TransferRepository, userRepo *authRepositories.UserRepository) *DisplayService {
-	return &DisplayService{glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation, stationRepo: stationRepo, transferRepo: transferRepo, userRepo: userRepo}
+func NewDisplayService(glassRepo *repositories.GlassRepository, movementRepo *repositories.MovementRepository, allocation *AllocationService, stationRepo *authRepositories.StationRepository, transferRepo *repositories.TransferRepository, userRepo *authRepositories.UserRepository, locationRepo *repositories.LocationRepository) *DisplayService {
+	return &DisplayService{glassRepo: glassRepo, movementRepo: movementRepo, allocation: allocation, stationRepo: stationRepo, transferRepo: transferRepo, userRepo: userRepo, locationRepo: locationRepo}
+}
+
+// AssignPresentoirSlot pose une monture dans un casier désigné, au lieu du premier casier
+// libre que retient l'attribution automatique (allocation_service.go findOrCreateLocation).
+//
+// La vendeuse range la monture là où il y a physiquement de la place, pas là où le système
+// l'a décidé : sans ce geste, le casier enregistré et le casier réel divergent dès la
+// première journée, et l'emplacement affiché n'aide plus personne à retrouver une monture.
+//
+// Même ordre que RelocateGlass : on occupe le nouveau casier AVANT de libérer l'ancien. Un
+// casier resté marqué occupé à tort se corrige d'un scan ; une monture sans emplacement se
+// cherche en rayon.
+func (s *DisplayService) AssignPresentoirSlot(barcode string, stationID int64, locationCode string, userID int64) (*models.StorageLocation, error) {
+	code := strings.ToUpper(strings.TrimSpace(locationCode))
+	if code == "" {
+		return nil, fmt.Errorf("casier requis")
+	}
+
+	glass, err := s.glassRepo.GetByBarcode(barcode)
+	if err != nil {
+		return nil, err
+	}
+	if glass.StationID != stationID {
+		return nil, fmt.Errorf("la monture %s n'est pas à cette station", barcode)
+	}
+	// Un casier de présentoir ne se donne qu'à une monture exposée : en accepter une qui est
+	// en caisse ou au laboratoire marquerait une place occupée par une monture absente.
+	if glass.Status != models.StatusEnPresentoir {
+		return nil, fmt.Errorf("statut actuel « %s » : seule une monture en présentoir occupe un casier", glass.Status)
+	}
+
+	location, err := s.locationRepo.FindOrCreatePresentoirByCode(stationID, code)
+	if err != nil {
+		return nil, err
+	}
+
+	// Déjà dans ce casier : ne rien faire. Poursuivre libérerait l'ancien emplacement, qui
+	// est le même que le nouveau — la monture se retrouverait dans un casier marqué libre.
+	if glass.LocationID != nil && *glass.LocationID == location.ID {
+		return location, nil
+	}
+
+	occupant, err := s.locationRepo.FindGlassBarcodeAtLocation(location.ID)
+	if err != nil {
+		return nil, err
+	}
+	if occupant != "" {
+		return nil, fmt.Errorf("le casier %s est déjà occupé par %s", code, occupant)
+	}
+
+	oldLocationID := glass.LocationID
+	if err := s.locationRepo.UpdateStatus(location.ID, "OCCUPE"); err != nil {
+		return nil, err
+	}
+	if err := s.glassRepo.UpdateLocation(glass.ID, location.ID); err != nil {
+		if freeErr := s.allocation.FreeLocation(location.ID); freeErr != nil {
+			log.Printf("⚠️  Casier #%d occupé mais non attribué et non libéré: %v", location.ID, freeErr)
+		}
+		return nil, err
+	}
+	if oldLocationID != nil {
+		if err := s.allocation.FreeLocation(*oldLocationID); err != nil {
+			log.Printf("⚠️  Erreur libération ancien casier (glass #%d): %v", glass.ID, err)
+		}
+	}
+
+	movement := &models.Movement{
+		GlassID:        glass.ID,
+		FromStationID:  &glass.StationID,
+		ToStationID:    &glass.StationID,
+		FromLocationID: oldLocationID,
+		ToLocationID:   &location.ID,
+		Action:         models.ActionRangement,
+		UserID:         userID,
+	}
+	if err := s.movementRepo.Create(movement); err != nil {
+		log.Printf("⚠️  Erreur création mouvement rangement (glass #%d): %v", glass.ID, err)
+	}
+
+	location.Status = "OCCUPE"
+	return location, nil
 }
 
 // RelocateGlass attribue un nouvel emplacement libre à une monture, dans la même zone de la
