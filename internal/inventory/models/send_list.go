@@ -39,7 +39,9 @@ type SendListItemRequest struct {
 }
 
 type SendListCreateRequest struct {
-	SessionCode string                `json:"session_code" binding:"required"`
+	// Vide côté client : c'est le signal qu'une liste est composée depuis le stock existant
+	// plutôt que depuis une session de réception (voir Create dans send_list_handler.go).
+	SessionCode string                `json:"session_code"`
 	City        string                `json:"city" binding:"required"`
 	Items       []SendListItemRequest `json:"items"`
 }
