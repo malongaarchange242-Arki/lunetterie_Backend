@@ -72,6 +72,15 @@ func startExpiredReservesSweeper(reserveSvc *services.ReserveService) {
 	}()
 }
 
+func ensureReceptionCommandActivationColumn(db *sqlx.DB) {
+	if _, err := db.Exec(`
+		ALTER TABLE reception_commands
+		ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE NULL;
+	`); err != nil {
+		log.Printf("⚠️ Impossible d'ajouter la colonne reception_commands.activated_at: %v", err)
+	}
+}
+
 func main() {
 	// Charger les variables d'environnement
 	_ = godotenv.Load()
@@ -108,6 +117,7 @@ func main() {
 	if _, err := db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS city VARCHAR(100)`); err != nil {
 		log.Printf("⚠️ Impossible d'ajouter la colonne users.city: %v", err)
 	}
+	ensureReceptionCommandActivationColumn(db)
 
 	// Initialiser les repositories
 	glassRepo := repositories.NewGlassRepository(db)
