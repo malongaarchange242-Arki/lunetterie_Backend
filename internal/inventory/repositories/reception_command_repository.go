@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -48,7 +49,7 @@ func (r *ReceptionCommandRepository) GetLatestCodeWithPrefix(prefix string) (str
 func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionCommand, error) {
 	commands := []models.ReceptionCommand{}
 	query := `
-        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, created_at, updated_at
+        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, activated_at, created_at, updated_at
         FROM reception_commands
     `
 	args := []interface{}{}
@@ -66,7 +67,7 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
-        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, created_at, updated_at
+        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, activated_at, created_at, updated_at
         FROM reception_commands
         WHERE code = $1
     `, strings.ToUpper(strings.TrimSpace(code)))
@@ -79,10 +80,34 @@ func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCo
 	return &command, nil
 }
 
+func (r *ReceptionCommandRepository) Activate(code string) (*models.ReceptionCommand, error) {
+	command, err := r.GetByCode(code)
+	if err != nil {
+		return nil, err
+	}
+	if command == nil {
+		return nil, nil
+	}
+	if command.Status != "active" || command.ActivatedAt != nil {
+		return command, nil
+	}
+
+	now := time.Now()
+	if _, err := r.db.Exec(`
+        UPDATE reception_commands
+        SET activated_at = $1, updated_at = NOW()
+        WHERE id = $2
+    `, now, command.ID); err != nil {
+		return nil, fmt.Errorf("impossible d'activer la commande: %w", err)
+	}
+	command.ActivatedAt = &now
+	return command, nil
+}
+
 func (r *ReceptionCommandRepository) Increment(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
-        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, created_at, updated_at
+        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, activated_at, created_at, updated_at
         FROM reception_commands
         WHERE code = $1
     `, strings.ToUpper(strings.TrimSpace(code)))

@@ -106,6 +106,22 @@ func (h *ReceptionCommandHandler) GetByCode(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"command": command})
 }
 
+// Activate est appelé par le poste de scan au moment où le code-barres de la
+// session est lu, pour que le suivi affiche "Reçu" dès ce scan.
+func (h *ReceptionCommandHandler) Activate(c *gin.Context) {
+	code := strings.TrimSpace(c.Param("code"))
+	command, err := h.repo.Activate(code)
+	if err != nil {
+		shared.InternalError(c, err.Error())
+		return
+	}
+	if command == nil {
+		shared.NotFound(c, "commande introuvable")
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"command": command})
+}
+
 func (h *ReceptionCommandHandler) Increment(c *gin.Context) {
 	code := strings.TrimSpace(c.Param("code"))
 	command, err := h.repo.Increment(code)
