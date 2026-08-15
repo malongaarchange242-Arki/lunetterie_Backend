@@ -32,7 +32,60 @@ func (s *AllocationService) FindFreeLocation(stationID int64, zone models.ZoneTy
 	return s.findFreeLocationForTier(stationID, zone, "")
 }
 
+// resolveStorageStationID traduit une station opérationnelle (boutique, caisse...) vers la
+// station qui porte physiquement son stock — le "Stock Général" de sa ville. Ces stations
+// n'ont pas leur propre arborescence storage_locations en zone STOCK : les emplacements
+// physiques n'existent que sur le Stock Général, quelle que soit la station à laquelle un
+// compte ou une monture est rattaché administrativement.
+//
+// CASE WHEN id = $1 THEN 0 : si la station demandée EST déjà un Stock Général, elle se
+// choisit elle-même plutôt qu'un homonyme d'une autre ville partageant la même liste de
+// candidats — la requête ne filtre que par ville, pas par égalité stricte de nom.
+func (s *AllocationService) resolveStorageStationID(stationID int64) (int64, error) {
+	var storageStationID int64
+
+	query := `
+		SELECT id
+		FROM stations
+		WHERE city = (
+			SELECT city
+			FROM stations
+			WHERE id = $1
+		)
+		AND name ILIKE 'Stock Général%'
+		ORDER BY
+			CASE
+				WHEN id = $1 THEN 0
+				ELSE 1
+			END,
+			id
+		LIMIT 1
+	`
+
+	err := s.db.Get(&storageStationID, query, stationID)
+	if err != nil {
+		return 0, fmt.Errorf(
+			"impossible de trouver le stock physique pour la station %d: %w",
+			stationID,
+			err,
+		)
+	}
+
+	return storageStationID, nil
+}
+
 func (s *AllocationService) findFreeLocationForTier(stationID int64, zone models.ZoneType, tier string) (*models.StorageLocation, error) {
+	lookupStationID := stationID
+	// Seule la zone STOCK est centralisée au Stock Général : PRESENTOIR et LABORATOIRE restent
+	// propres à chaque station (le présentoir d'une boutique est chez elle, pas à l'entrepôt).
+	if zone == models.ZoneStock {
+		resolved, err := s.resolveStorageStationID(stationID)
+		if err != nil {
+			return nil, err
+		}
+		lookupStationID = resolved
+	}
+
 	query := `
 		SELECT id, station_id, code, type, zone, status
 		FROM storage_locations
@@ -43,7 +96,7 @@ func (s *AllocationService) findFreeLocationForTier(stationID int64, zone models
 		ORDER BY code`
 
 	var locations []models.StorageLocation
-	err := s.db.Select(&locations, query, stationID, zone)
+	err := s.db.Select(&locations, query, lookupStationID, zone)
 	if err != nil {
 		return nil, fmt.Errorf("impossible de lister les emplacements libres: %w", err)
 	}
