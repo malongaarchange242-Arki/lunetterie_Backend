@@ -17,6 +17,11 @@ const (
 	ProformaOutcomeRetour = "RETOUR_PRESENTOIR"
 )
 
+// Destination d'une proforma réglée, posée par CloseIfComplete. Seul "labo" est écrit ici :
+// une monture réservée peut être libérée plus tard sans que la proforma ne bouge, donc ce
+// cas-là reste déduit du statut RESERVEE courant des montures plutôt que figé en base.
+const ProformaDestinationLabo = "labo"
+
 // Proforma : le document émis au Présentoir quand un client choisit des montures. Les
 // montures qu'elle porte sont bloquées jusqu'à l'arbitrage de la Caisse.
 type Proforma struct {
@@ -27,6 +32,9 @@ type Proforma struct {
 	ClientPhone *string `db:"client_phone" json:"client_phone,omitempty"`
 	TotalAmount float64 `db:"total_amount" json:"total_amount"`
 	Status      string  `db:"status" json:"status"`
+	// NULL tant que la proforma n'est pas réglée avec au moins une ligne vendue. Voir
+	// ProformaDestinationLabo : le cas "reserve" n'est jamais écrit ici.
+	Destination *string `db:"destination" json:"destination,omitempty"`
 	Note        *string `db:"note" json:"note,omitempty"`
 	CreatedBy   *int64  `db:"created_by" json:"created_by,omitempty"`
 	// Le nom de l'auteur, résolu à la lecture par jointure sur `users`. Sans lui, l'écran

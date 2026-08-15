@@ -22,7 +22,7 @@ func NewProformaRepository(db *sqlx.DB) *ProformaRepository {
 // Les colonnes sont préfixées depuis que la jointure sur `users` accompagne la lecture :
 // `id` seul serait ambigu entre les deux tables.
 const proformaColumns = `p.id, p.code, p.station_id, p.client_name, p.client_phone, p.total_amount,
-        p.status, p.note, p.created_by, p.settled_by, p.settled_at, p.created_at, p.updated_at,
+        p.status, p.destination, p.note, p.created_by, p.settled_by, p.settled_at, p.created_at, p.updated_at,
         NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), '') AS created_by_name`
 
 // `created_by` ne porte qu'un identifiant, et le poste Caisse ne peut pas le traduire lui-même :
@@ -250,13 +250,16 @@ func (r *ProformaRepository) CloseIfComplete(proformaID, userID int64) (string, 
 	}
 
 	status := models.ProformaStatusAnnulee
+	var destination *string
 	if sold > 0 {
 		status = models.ProformaStatusReglee
+		labo := models.ProformaDestinationLabo
+		destination = &labo
 	}
 	update := `UPDATE proformas
-        SET status = $1, settled_by = $2, settled_at = NOW(), updated_at = NOW()
-        WHERE id = $3`
-	if _, err := r.db.Exec(update, status, nullIfZero(userID), proformaID); err != nil {
+        SET status = $1, destination = COALESCE($2, destination), settled_by = $3, settled_at = NOW(), updated_at = NOW()
+        WHERE id = $4`
+	if _, err := r.db.Exec(update, status, destination, nullIfZero(userID), proformaID); err != nil {
 		return "", fmt.Errorf("impossible de clôturer la proforma %d: %w", proformaID, err)
 	}
 	return status, nil
