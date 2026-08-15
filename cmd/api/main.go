@@ -519,6 +519,7 @@ func main() {
 				receptionCommands.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), receptionCommandHandler.Create)
 				receptionCommands.GET("", authMiddleware.RequireRoles(1, 2, 3, 8, 12), receptionCommandHandler.List)
 				receptionCommands.GET("/:code", receptionCommandHandler.GetByCode)
+				receptionCommands.POST("/:code/activate", receptionCommandHandler.Activate)
 				receptionCommands.POST("/:code/increment", receptionCommandHandler.Increment)
 			}
 
