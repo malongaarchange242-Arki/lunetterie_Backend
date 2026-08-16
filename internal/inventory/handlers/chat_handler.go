@@ -16,11 +16,13 @@ import (
 var chatAllowedRoles = map[int64]bool{
 	1:  true, // SUPER_ADMIN
 	2:  true, // ADMIN
+	4:  true, // VENDEUR — chat limité à sa station côté front (VendeuseChatBot, vendeuse.tsx)
 	8:  true, // DIRECTION
 	12: true, // SUPER_DIRECTEUR
 }
 
-// ChatHandler expose le chatbot de direction (résumés/questions sur l'activité du magasin)
+// ChatHandler expose le chatbot de direction et, dans une version au contexte restreint à
+// une seule station, celui du poste vendeuse (résumés/questions sur l'activité du magasin)
 type ChatHandler struct {
 	aiService *services.AIService
 }
@@ -30,8 +32,9 @@ func NewChatHandler(aiService *services.AIService) *ChatHandler {
 	return &ChatHandler{aiService: aiService}
 }
 
-// HandleChat relaie {message, history, context} (déjà construit par direction.js) au
-// chatbot de direction du service IA. Réservé au rôle DIRECTION.
+// HandleChat relaie {message, history, context} (déjà construit côté front) au chatbot du
+// service IA. Réservé aux rôles direction/administration et, avec un contexte réduit à sa
+// propre station, au rôle VENDEUR.
 // POST /api/v1/ai/chat
 func (h *ChatHandler) HandleChat(c *gin.Context) {
 	roleID, _ := c.Get("role_id")
