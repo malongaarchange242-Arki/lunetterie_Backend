@@ -60,37 +60,27 @@ func (s *StorageGeneratorService) GetLocationPath(locationID int64) (string, str
 // (pas de passage en 'OCCUPE') : utilisé pour un simple affichage prévisionnel avant
 // l'enregistrement réel. L'emplacement effectivement attribué à la validation peut différer
 // si un autre enregistrement concurrent le prend entre-temps.
+//
+// Premier emplacement libre dans l'ordre du code, sans tri par tranche de prix : c'est la
+// même règle que AllocationService.FindFreeLocation, pour que cet aperçu montre exactement
+// l'emplacement que l'enregistrement va réellement attribuer.
 func (s *StorageGeneratorService) PeekFreeLocation(stationID int64, zone models.ZoneType) (int64, string, string, error) {
-	return s.PeekFreeLocationForPrice(stationID, zone, nil, "")
-}
-
-// PeekFreeLocationForPrice retourne le prochain emplacement libre d'un pool spécifique selon la gamme.
-func (s *StorageGeneratorService) PeekFreeLocationForPrice(stationID int64, zone models.ZoneType, price *float64, gamme string) (int64, string, string, error) {
-	query := `
+	var location models.StorageLocation
+	err := s.db.Get(&location, `
 		SELECT id, station_id, code, type, zone, status
 		FROM storage_locations
 		WHERE station_id = $1 AND zone = $2 AND type = 'POSITION' AND status = 'LIBRE'
-		ORDER BY code`
-
-	var locations []models.StorageLocation
-	err := s.db.Select(&locations, query, stationID, zone)
+		ORDER BY code
+		LIMIT 1`, stationID, zone)
 	if err != nil {
-		return 0, "", "", fmt.Errorf("impossible de lister les emplacements libres: %w", err)
-	}
-	if len(locations) == 0 {
 		return 0, "", "", fmt.Errorf("aucun emplacement libre: aucune position disponible")
 	}
 
-	selected := selectLocationByTier(locations, classifyPriceTier(price, gamme))
-	if selected == nil {
-		selected = &locations[0]
-	}
-
-	path, code, err := s.GetLocationPath(selected.ID)
+	path, code, err := s.GetLocationPath(location.ID)
 	if err != nil {
-		return selected.ID, "", "", nil
+		return location.ID, "", "", nil
 	}
-	return selected.ID, path, code, nil
+	return location.ID, path, code, nil
 }
 
 // FindFreeLocation trouve et réserve le premier emplacement libre pour une station

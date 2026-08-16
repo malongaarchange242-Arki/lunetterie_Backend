@@ -155,11 +155,10 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	}
 
 	if location == nil {
-		var gamme string
-		if req.Gamme != nil {
-			gamme = *req.Gamme
-		}
-		location, allocErr = w.allocationService.FindFreeLocationForPrice(req.StationID, models.ZoneStock, req.Price, gamme)
+		// Premier emplacement libre dans l'ordre du code (POS-01, POS-02, ... POS-20 par
+		// bac) : plus de découpage par tranche de prix — voir allocation_service.go pour
+		// l'historique de ce choix.
+		location, allocErr = w.allocationService.FindFreeLocation(req.StationID, models.ZoneStock)
 		if allocErr != nil {
 			return nil, fmt.Errorf("erreur allocation: %w", allocErr)
 		}
