@@ -163,7 +163,12 @@ func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListI
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
-			reg.author AS registered_by
+			reg.author AS registered_by,
+			(SELECT sl2.city
+			   FROM send_list_items sli2
+			   JOIN send_lists sl2 ON sl2.id = sli2.list_id
+			  WHERE sli2.barcode = g.barcode AND sl2.status <> 'TRAITEE'
+			  ORDER BY sli2.id DESC LIMIT 1) AS reserved_for_city
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id

@@ -44,6 +44,9 @@ type GlassListItem struct {
 	LocationCode    *string   `db:"location_code" json:"location_code,omitempty"`
 	PhotoMontureURL *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
 	PhotoBrancheURL *string   `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
+	// Ville de la liste d'envoi qui réserve cette monture (statut RESERVEE_ENVOI), tant que
+	// cette liste n'est pas TRAITEE. Nul pour tout autre statut.
+	ReservedForCity *string `db:"reserved_for_city" json:"reserved_for_city,omitempty"`
 	// La table glasses ne porte pas d'auteur : celui qui a enregistré la monture est
 	// l'utilisateur de son mouvement RECEPTION_FOURNISSEUR.
 	RegisteredBy *string `db:"registered_by" json:"registered_by,omitempty"`
