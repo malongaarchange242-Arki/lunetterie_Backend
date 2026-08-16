@@ -28,7 +28,10 @@ func NewGlassHandler(repo *repositories.GlassRepository, display *services.Displ
 // GET /api/v1/inventory/glasses?station_id=1&status=EN_STOCK_GENERAL,EN_STOCK_SOUS_STATION
 // GET /api/v1/inventory/glasses?status=PRETE_A_LIVRER (toutes stations)
 func (h *GlassHandler) ListGlasses(c *gin.Context) {
-	statuses := []string{"EN_STOCK_GENERAL", "EN_STOCK_SOUS_STATION"}
+	// RESERVEE_ENVOI reste listée par défaut : sans elle, une monture réservée par une liste
+	// d'envoi disparaîtrait purement et simplement du Stock Général au lieu d'y rester visible
+	// (grisée côté front) le temps que le magasinier la dispatche réellement.
+	statuses := []string{"EN_STOCK_GENERAL", "EN_STOCK_SOUS_STATION", "RESERVEE_ENVOI"}
 	if raw := c.Query("status"); raw != "" {
 		statuses = strings.Split(raw, ",")
 	}

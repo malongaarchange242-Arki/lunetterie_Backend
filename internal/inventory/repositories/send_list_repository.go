@@ -392,11 +392,23 @@ func (r *SendListRepository) Create(list *models.SendList, items []models.SendLi
 		line := `
             INSERT INTO send_list_items (list_id, glass_id, barcode, reference, brand, location_code)
             VALUES ($1, $2, $3, $4, $5, $6)`
+		// Réserve la monture dans la même transaction que la ligne qui la désigne : la liste
+		// et l'état des montures qu'elle contient ne doivent jamais diverger. Restreint à
+		// EN_STOCK_GENERAL par précaution — une monture déjà réservée ou partie ailleurs entre
+		// la sélection à l'écran et cet enregistrement ne doit pas être écrasée en silence.
+		reserve := `
+            UPDATE glasses SET status = 'RESERVEE_ENVOI', updated_at = NOW()
+            WHERE id = $1 AND status = 'EN_STOCK_GENERAL'`
 		for _, item := range items {
 			if _, err := tx.Exec(line, list.ID, item.GlassID,
 				nullIfEmpty(item.Barcode), nullIfEmpty(item.Reference),
 				nullIfEmpty(item.Brand), nullIfEmpty(item.LocationCode)); err != nil {
 				return fmt.Errorf("impossible d'enregistrer une ligne de la liste: %w", err)
+			}
+			if item.GlassID != nil {
+				if _, err := tx.Exec(reserve, *item.GlassID); err != nil {
+					return fmt.Errorf("impossible de réserver la monture #%d: %w", *item.GlassID, err)
+				}
 			}
 		}
 	}

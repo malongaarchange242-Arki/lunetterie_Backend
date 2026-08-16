@@ -6,6 +6,11 @@ type GlassStatus string
 const (
 	StatusRecuFournisseur    GlassStatus = "RECU_FOURNISSEUR"
 	StatusEnStockGeneral     GlassStatus = "EN_STOCK_GENERAL"
+	// Réservée par une liste d'envoi créée mais pas encore dispatchée (voir SendListRepository.
+	// Create) : distinct d'EN_TRANSIT, qui ne marque que le départ réel confirmé par le
+	// magasinier. Transférable comme EN_STOCK_GENERAL (cf. transferableStatuses) puisque la
+	// monture n'a physiquement pas bougé.
+	StatusReserveeEnvoi      GlassStatus = "RESERVEE_ENVOI"
 	StatusEnTransit          GlassStatus = "EN_TRANSIT"
 	StatusEnStockSousStation GlassStatus = "EN_STOCK_SOUS_STATION"
 	StatusEnPresentoir       GlassStatus = "EN_PRESENTOIR"

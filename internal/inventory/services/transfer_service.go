@@ -22,6 +22,9 @@ var transferableStatuses = map[models.GlassStatus]bool{
 	models.StatusEnStockGeneral:     true,
 	models.StatusEnStockSousStation: true,
 	models.StatusEnPresentoir:       true,
+	// Réservée par une liste d'envoi pas encore dispatchée : elle n'a pas bougé physiquement,
+	// le vrai départ (SendListDispatchService.Dispatch) doit donc pouvoir la prendre.
+	models.StatusReserveeEnvoi: true,
 }
 
 func NewTransferService(
