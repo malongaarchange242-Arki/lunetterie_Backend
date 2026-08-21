@@ -18,3 +18,4 @@ ALTER TABLE glasses ADD CONSTRAINT glasses_status_check CHECK (status IN (
     'EN_LABORATOIRE', 'PRETE_A_LIVRER', 'LIVREE', 'VENDUE',
     'PERDUE', 'CASSEE', 'RETOURNEE'
 ));
+

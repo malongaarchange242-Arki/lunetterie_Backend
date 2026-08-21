@@ -265,6 +265,7 @@ func main() {
 			"http://127.0.0.1:5500",
 			"http://localhost:8443",
 			"http://127.0.0.1:8080",
+			"http://localhost:8443",
 		}
 		isAllowedOrigin := false
 		for _, allowed := range allowedOrigins {
