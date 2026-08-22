@@ -18,6 +18,7 @@ type sendListRepository interface {
 	SplitAvailableBarcodes(barcodes []string) ([]string, map[string]string, error)
 	List(status string) ([]models.SendList, error)
 	ListItems(listID int64, query string) ([]models.SendListItem, error)
+	Cancel(id int64) (*models.SendList, error)
 	MarkSeen(ids []int64) (int64, error)
 	MarkProcessed(ids []int64) (int64, error)
 }
@@ -130,7 +131,7 @@ func (h *SendListHandler) Create(c *gin.Context) {
 // GET /api/v1/inventory/send-lists?status=NOUVELLE
 func (h *SendListHandler) List(c *gin.Context) {
 	status := strings.ToUpper(strings.TrimSpace(c.Query("status")))
-	if status != "" && status != "NOUVELLE" && status != "VUE" && status != "TRAITEE" {
+	if status != "" && status != "NOUVELLE" && status != "VUE" && status != "TRAITEE" && status != "ANNULEE" {
 		shared.BadRequest(c, "status invalide")
 		return
 	}
@@ -159,6 +160,23 @@ func (h *SendListHandler) GetItems(c *gin.Context) {
 		return
 	}
 	shared.Success(c, http.StatusOK, gin.H{"items": items})
+}
+
+// Cancel annule une liste tant qu'elle n'a pas encore été dispatchée.
+// DELETE /api/v1/inventory/send-lists/:id
+func (h *SendListHandler) Cancel(c *gin.Context) {
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || listID <= 0 {
+		shared.BadRequest(c, "ID de liste invalide")
+		return
+	}
+
+	list, err := h.repo.Cancel(listID)
+	if err != nil {
+		shared.BadRequest(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"list": list})
 }
 
 // MarkProcessed clôt les listes dont le colis est préparé, une fois toutes les montures

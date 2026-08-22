@@ -46,6 +46,13 @@ type SendListCreateRequest struct {
 	Items       []SendListItemRequest `json:"items"`
 }
 
+const (
+	SendListStatusNouvelle = "NOUVELLE"
+	SendListStatusVue      = "VUE"
+	SendListStatusTraitee  = "TRAITEE"
+	SendListStatusAnnulee  = "ANNULEE"
+)
+
 // Statuts d'un carton, dans l'ordre de son voyage :
 //
 //	CREATED — parti du stock général, montures EN_TRANSIT, pas encore vu au magasin.

@@ -442,6 +442,7 @@ func main() {
 				sendLists.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), sendListHandler.Create)
 				sendLists.GET("", sendListHandler.List)
 				sendLists.GET("/:id/items", sendListHandler.GetItems)
+				sendLists.DELETE("/:id", authMiddleware.RequireRoles(1, 2, 8, 12), sendListHandler.Cancel)
 				sendLists.POST("/seen", sendListHandler.MarkSeen)
 				sendLists.POST("/processed", sendListHandler.MarkProcessed)
 				// Envoi effectif du colis vers le magasin de la ville de la liste : déplace les

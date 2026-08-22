@@ -78,6 +78,9 @@ func (s *SendListDispatchService) Dispatch(listID, fromStationID, userID int64) 
 	if list.Status == "TRAITEE" {
 		return nil, fmt.Errorf("cette liste a déjà été envoyée")
 	}
+	if list.Status == models.SendListStatusAnnulee {
+		return nil, fmt.Errorf("cette liste a été annulée")
+	}
 
 	station, err := s.resolveLocalStation(list.City)
 	if err != nil {

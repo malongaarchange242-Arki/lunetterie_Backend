@@ -167,7 +167,7 @@ func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListI
 			(SELECT sl2.city
 			   FROM send_list_items sli2
 			   JOIN send_lists sl2 ON sl2.id = sli2.list_id
-			  WHERE sli2.barcode = g.barcode AND sl2.status <> 'TRAITEE'
+			  WHERE sli2.barcode = g.barcode AND sl2.status NOT IN ('TRAITEE', 'ANNULEE')
 			  ORDER BY sli2.id DESC LIMIT 1) AS reserved_for_city
 		FROM glasses g
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id

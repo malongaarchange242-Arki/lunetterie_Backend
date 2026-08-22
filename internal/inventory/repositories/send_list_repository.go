@@ -164,7 +164,7 @@ func (r *SendListRepository) SplitAvailableBarcodes(barcodes []string) (availabl
             (SELECT sl.session_code
                FROM send_list_items sli
                JOIN send_lists sl ON sl.id = sli.list_id
-              WHERE sli.barcode = b.barcode AND sl.status <> 'TRAITEE'
+              WHERE sli.barcode = b.barcode AND sl.status NOT IN ('TRAITEE', 'ANNULEE')
               LIMIT 1) AS on_list
         FROM UNNEST($1::text[]) AS b(barcode)
         LEFT JOIN glasses g ON g.barcode = b.barcode`
@@ -472,6 +472,64 @@ func (r *SendListRepository) ListItems(listID int64, query string) ([]models.Sen
 	return items, nil
 }
 
+// Cancel annule une liste qui n'a pas encore été dispatchée et libère les montures qu'elle
+// avait réservées au stock général. La liste reste en base pour l'historique Direction.
+func (r *SendListRepository) Cancel(id int64) (*models.SendList, error) {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return nil, fmt.Errorf("impossible d'ouvrir la transaction d'annulation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var list models.SendList
+	query := `
+        SELECT id, session_code, city, item_count, status, sent_count, destination_station_name, created_by, created_at, updated_at
+        FROM send_lists
+        WHERE id = $1
+        FOR UPDATE`
+	if err := tx.Get(&list, query, id); err != nil {
+		return nil, fmt.Errorf("liste introuvable: %w", err)
+	}
+
+	switch list.Status {
+	case models.SendListStatusAnnulee:
+		return &list, nil
+	case models.SendListStatusTraitee:
+		return nil, fmt.Errorf("cette liste est déjà traitée et ne peut plus être annulée")
+	case models.SendListStatusNouvelle, models.SendListStatusVue:
+	default:
+		return nil, fmt.Errorf("statut de liste non annulable: %s", list.Status)
+	}
+	if list.SentCount > 0 {
+		return nil, fmt.Errorf("cette liste a déjà commencé à être expédiée")
+	}
+
+	release := `
+        UPDATE glasses g
+        SET status = 'EN_STOCK_GENERAL', updated_at = NOW()
+        FROM send_list_items sli
+        WHERE sli.list_id = $1
+          AND sli.glass_id = g.id
+          AND g.status = 'RESERVEE_ENVOI'`
+	if _, err := tx.Exec(release, id); err != nil {
+		return nil, fmt.Errorf("impossible de libérer les montures réservées: %w", err)
+	}
+
+	update := `
+        UPDATE send_lists
+        SET status = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, session_code, city, item_count, status, sent_count, destination_station_name, created_by, created_at, updated_at`
+	if err := tx.Get(&list, update, id, models.SendListStatusAnnulee); err != nil {
+		return nil, fmt.Errorf("impossible d'annuler la liste: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("impossible de valider l'annulation: %w", err)
+	}
+	return &list, nil
+}
+
 // MarkProcessed clôt une liste dont toutes les montures ont été vérifiées et le colis
 // préparé. Accepte NOUVELLE comme VUE : une liste peut être contrôlée sans que la
 // notification ait été acquittée. Rejouer l'appel ne change rien.
@@ -482,7 +540,7 @@ func (r *SendListRepository) MarkProcessed(ids []int64) (int64, error) {
 	result, err := r.db.Exec(`
         UPDATE send_lists
         SET status = 'TRAITEE', sent_count = item_count, updated_at = NOW()
-        WHERE id = ANY($1) AND status <> 'TRAITEE'`, pq.Array(ids))
+        WHERE id = ANY($1) AND status NOT IN ('TRAITEE', 'ANNULEE')`, pq.Array(ids))
 	if err != nil {
 		return 0, fmt.Errorf("impossible de clôturer les listes: %w", err)
 	}
@@ -501,9 +559,9 @@ func (r *SendListRepository) MarkSentCount(ids []int64, sentCount int64, station
         UPDATE send_lists
         SET sent_count = $2,
             destination_station_name = $3,
-            status = CASE WHEN status <> 'TRAITEE' THEN 'TRAITEE' ELSE status END,
+            status = CASE WHEN status NOT IN ('TRAITEE', 'ANNULEE') THEN 'TRAITEE' ELSE status END,
             updated_at = NOW()
-        WHERE id = ANY($1)`, pq.Array(ids), sentCount, nullIfEmptyForDB(stationName))
+        WHERE id = ANY($1) AND status <> 'ANNULEE'`, pq.Array(ids), sentCount, nullIfEmptyForDB(stationName))
 	if err != nil {
 		return 0, fmt.Errorf("impossible de mémoriser le résultat d'envoi: %w", err)
 	}
