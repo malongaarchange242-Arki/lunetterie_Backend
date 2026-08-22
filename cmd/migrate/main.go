@@ -38,6 +38,7 @@ func main() {
 		"migrations/006_glasses_photos.up.sql",
 		"migrations/038_store_geography.up.sql",
 		"migrations/039_supplier_orders_gender.up.sql",
+		"migrations/040_feature_settings.up.sql",
 		"migrations/014_seed_directeur.up.sql",
 	}
 

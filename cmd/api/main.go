@@ -20,6 +20,7 @@ import (
 	inventoryHandlers "github.com/lunetterie/backend/internal/inventory/handlers"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
 	"github.com/lunetterie/backend/internal/inventory/services"
+	settingsStore "github.com/lunetterie/backend/internal/settings"
 	"github.com/lunetterie/backend/internal/workflows"
 )
 
@@ -81,6 +82,18 @@ func ensureReceptionCommandActivationColumn(db *sqlx.DB) {
 	}
 }
 
+func ensureAppSettingsTable(db *sqlx.DB) {
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS app_settings (
+			key VARCHAR(100) PRIMARY KEY,
+			value JSONB NOT NULL,
+			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+		);
+	`); err != nil {
+		log.Printf("⚠️ Impossible de créer la table app_settings: %v", err)
+	}
+}
+
 func main() {
 	// Charger les variables d'environnement
 	_ = godotenv.Load()
@@ -118,6 +131,7 @@ func main() {
 		log.Printf("⚠️ Impossible d'ajouter la colonne users.city: %v", err)
 	}
 	ensureReceptionCommandActivationColumn(db)
+	ensureAppSettingsTable(db)
 
 	// Initialiser les repositories
 	glassRepo := repositories.NewGlassRepository(db)
@@ -178,6 +192,7 @@ func main() {
 	supplierOrderRepo := repositories.NewSupplierOrderRepository(db)
 	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)
 	expeditionHandler := inventoryHandlers.NewExpeditionHandler(supplierOrderRepo)
+	settingsHandler := settingsStore.NewHandler(settingsStore.NewRepository(db))
 	demandBasketRepo := repositories.NewDemandBasketRepository(db)
 	demandBasketHandler := inventoryHandlers.NewDemandBasketHandler(demandBasketRepo)
 	sendListRepo := repositories.NewSendListRepository(db)
@@ -602,6 +617,13 @@ func main() {
 				presentoir.POST("/assign-slot", presentoirHandler.AssignSlot)
 			}
 			inventory.GET("/movements", movementHandler.ListMovements)
+		}
+
+		settings := v1.Group("/settings")
+		settings.Use(authMiddleware.RequireAuth(authSvc))
+		{
+			settings.GET("/features", settingsHandler.Get)
+			settings.PUT("/features", authMiddleware.RequireRoles(1, 2, 8, 12), settingsHandler.Save)
 		}
 
 		// Assistant IA de direction (résumés/questions sur l'activité)
