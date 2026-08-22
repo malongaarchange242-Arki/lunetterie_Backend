@@ -175,6 +175,38 @@ func (h *AuthHandler) ListStations(c *gin.Context) {
 	})
 }
 
+func (h *AuthHandler) CreateStation(c *gin.Context) {
+	var req dto.CreateStationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "La ville est obligatoire")
+		return
+	}
+
+	city := strings.TrimSpace(req.City)
+	if city == "" {
+		shared.BadRequest(c, "La ville est obligatoire")
+		return
+	}
+
+	stations, err := h.stationRepo.FindLocalStationsByCity(city)
+	if err != nil {
+		shared.InternalError(c, "Impossible de vérifier le magasin")
+		return
+	}
+	if len(stations) > 0 {
+		shared.BadRequest(c, "Un magasin existe déjà dans cette ville")
+		return
+	}
+
+	station, err := h.stationRepo.CreateStore(city)
+	if err != nil {
+		shared.InternalError(c, "Impossible de créer le magasin")
+		return
+	}
+
+	shared.Success(c, http.StatusCreated, gin.H{"station": station})
+}
+
 // CheckEmail répond juste "ce compte existe-t-il, a-t-il déjà un mot de passe ?", pour
 // l'étape email de la page de connexion (avant authentification). Ne renvoie PAS le
 // reste du dossier utilisateur : contrairement à GET /auth/users (désormais réservé aux

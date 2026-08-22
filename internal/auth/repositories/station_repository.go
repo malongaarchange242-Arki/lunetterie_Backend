@@ -26,6 +26,18 @@ func (r *StationRepository) FindAll() ([]models.Station, error) {
 	}
 	return stations, nil
 }
+
+func (r *StationRepository) CreateStore(city string) (*models.Station, error) {
+	var station models.Station
+	query := `INSERT INTO stations (name, type, city, is_active, created_at)
+		VALUES ($1, 'SOUS_STATION', $2, true, NOW())
+		RETURNING id, name, type, city, address, phone, is_active, created_at`
+	if err := r.db.Get(&station, query, "Station "+city, city); err != nil {
+		return nil, fmt.Errorf("impossible de créer le magasin: %w", err)
+	}
+	return &station, nil
+}
+
 func (r *StationRepository) GetByID(id int64) (*models.Station, error) {
 	var station models.Station
 	query := `SELECT id, name, type, city, address, phone, is_active, created_at FROM stations WHERE id = $1`
