@@ -9,6 +9,7 @@ type SupplierOrder struct {
 	ID        int64     `db:"id" json:"id"`
 	Supplier  string    `db:"supplier" json:"supplier"`
 	Quantity  int       `db:"quantity" json:"quantity"`
+	Gender    string    `db:"gender" json:"gender"`
 	OrderDate time.Time `db:"order_date" json:"order_date"`
 	Note      *string   `db:"note" json:"note,omitempty"`
 	CreatedBy *int64    `db:"created_by" json:"created_by,omitempty"`
@@ -19,6 +20,7 @@ type SupplierOrder struct {
 type SupplierOrderCreateRequest struct {
 	Supplier  string `json:"supplier" binding:"required"`
 	Quantity  int    `json:"quantity" binding:"required"`
+	Gender    string `json:"gender" binding:"required"`
 	OrderDate string `json:"order_date" binding:"required"`
 	Note      string `json:"note"`
 }

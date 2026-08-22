@@ -18,18 +18,18 @@ func NewSupplierOrderRepository(db *sqlx.DB) *SupplierOrderRepository {
 
 func (r *SupplierOrderRepository) Create(order *models.SupplierOrder) error {
 	query := `
-        INSERT INTO supplier_orders (supplier, quantity, order_date, note, created_by)
-        VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO supplier_orders (supplier, quantity, gender, order_date, note, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, created_at, updated_at
     `
-	return r.db.QueryRowx(query, order.Supplier, order.Quantity, order.OrderDate, order.Note, order.CreatedBy).
+	return r.db.QueryRowx(query, order.Supplier, order.Quantity, order.Gender, order.OrderDate, order.Note, order.CreatedBy).
 		Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
 }
 
 func (r *SupplierOrderRepository) List() ([]models.SupplierOrder, error) {
 	orders := []models.SupplierOrder{}
 	err := r.db.Select(&orders, `
-        SELECT id, supplier, quantity, order_date, note, created_by, created_at, updated_at
+		SELECT id, supplier, quantity, gender, order_date, note, created_by, created_at, updated_at
         FROM supplier_orders
         ORDER BY order_date DESC, created_at DESC
     `)

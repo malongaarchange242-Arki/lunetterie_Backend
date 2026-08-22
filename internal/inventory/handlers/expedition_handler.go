@@ -44,6 +44,11 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 		shared.BadRequest(c, "quantity doit être supérieur à 0")
 		return
 	}
+	gender := strings.ToUpper(strings.TrimSpace(req.Gender))
+	if gender != "HOMME" && gender != "FEMME" && gender != "ENFANT" && gender != "UNISEXE" {
+		shared.BadRequest(c, "gender invalide")
+		return
+	}
 	orderDate, err := time.Parse("2006-01-02", req.OrderDate)
 	if err != nil {
 		shared.BadRequest(c, "order_date invalide (format attendu AAAA-MM-JJ)")
@@ -55,6 +60,7 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 	order := &models.SupplierOrder{
 		Supplier:  supplier,
 		Quantity:  req.Quantity,
+		Gender:    gender,
 		OrderDate: orderDate,
 	}
 	if note != "" {
