@@ -1,5 +1,6 @@
 package dto
 
 type CreateStationRequest struct {
-	City string `json:"city" binding:"required"`
+	Country string `json:"country" binding:"required"`
+	City    string `json:"city" binding:"required"`
 }

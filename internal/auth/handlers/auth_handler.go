@@ -182,9 +182,10 @@ func (h *AuthHandler) CreateStation(c *gin.Context) {
 		return
 	}
 
+	country := strings.TrimSpace(req.Country)
 	city := strings.TrimSpace(req.City)
-	if city == "" {
-		shared.BadRequest(c, "La ville est obligatoire")
+	if country == "" || city == "" {
+		shared.BadRequest(c, "Le pays et la ville sont obligatoires")
 		return
 	}
 
@@ -198,7 +199,7 @@ func (h *AuthHandler) CreateStation(c *gin.Context) {
 		return
 	}
 
-	station, err := h.stationRepo.CreateStore(city)
+	station, err := h.stationRepo.CreateStore(country, city)
 	if err != nil {
 		shared.InternalError(c, "Impossible de créer le magasin")
 		return

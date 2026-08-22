@@ -17,8 +17,9 @@ func NewStationRepository(db *sqlx.DB) *StationRepository {
 
 func (r *StationRepository) FindAll() ([]models.Station, error) {
 	stations := []models.Station{}
-	query := `SELECT id, name, type, city, address, phone, is_active, created_at
-		FROM stations
+	query := `SELECT s.id, s.name, s.type, s.city, p.nom AS country, s.address, s.phone, s.is_active, s.created_at
+		FROM stations s
+		LEFT JOIN pays p ON p.id = s.pays_id
 		WHERE is_active = true
 		ORDER BY name ASC`
 	if err := r.db.Select(&stations, query); err != nil {
@@ -27,13 +28,38 @@ func (r *StationRepository) FindAll() ([]models.Station, error) {
 	return stations, nil
 }
 
-func (r *StationRepository) CreateStore(city string) (*models.Station, error) {
+func (r *StationRepository) CreateStore(country, city string) (*models.Station, error) {
 	var station models.Station
-	query := `INSERT INTO stations (name, type, city, is_active, created_at)
-		VALUES ($1, 'SOUS_STATION', $2, true, NOW())
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return nil, fmt.Errorf("impossible de préparer la création du magasin: %w", err)
+	}
+	defer tx.Rollback()
+
+	var countryID int64
+	if err := tx.Get(&countryID, `
+		INSERT INTO pays (nom) VALUES ($1)
+		ON CONFLICT (nom) DO UPDATE SET nom = EXCLUDED.nom
+		RETURNING id`, country); err != nil {
+		return nil, fmt.Errorf("impossible d'enregistrer le pays: %w", err)
+	}
+
+	var cityID int64
+	if err := tx.Get(&cityID, `SELECT id FROM villes WHERE nom = $1 AND pays_id = $2 LIMIT 1`, city, countryID); err != nil {
+		if err := tx.Get(&cityID, `INSERT INTO villes (nom, pays_id) VALUES ($1, $2) RETURNING id`, city, countryID); err != nil {
+			return nil, fmt.Errorf("impossible d'enregistrer la ville: %w", err)
+		}
+	}
+
+	query := `INSERT INTO stations (name, type, city, pays_id, ville_id, is_active, created_at)
+		VALUES ($1, 'SOUS_STATION', $2, $3, $4, true, NOW())
 		RETURNING id, name, type, city, address, phone, is_active, created_at`
-	if err := r.db.Get(&station, query, "Station "+city, city); err != nil {
+	if err := tx.Get(&station, query, "Station "+city, city, countryID, cityID); err != nil {
 		return nil, fmt.Errorf("impossible de créer le magasin: %w", err)
+	}
+	station.Country = &country
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("impossible de valider le magasin: %w", err)
 	}
 	return &station, nil
 }
