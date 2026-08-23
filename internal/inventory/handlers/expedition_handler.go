@@ -49,6 +49,14 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 		shared.BadRequest(c, "gender invalide")
 		return
 	}
+	gamme := strings.ToLower(strings.TrimSpace(req.Gamme))
+	if gamme == "" {
+		gamme = "classique"
+	}
+	if gamme != "classique" && gamme != "moyenne" && gamme != "luxe" && gamme != "panache" {
+		shared.BadRequest(c, "gamme invalide")
+		return
+	}
 	orderDate, err := time.Parse("2006-01-02", req.OrderDate)
 	if err != nil {
 		shared.BadRequest(c, "order_date invalide (format attendu AAAA-MM-JJ)")
@@ -61,6 +69,7 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 		Supplier:  supplier,
 		Quantity:  req.Quantity,
 		Gender:    gender,
+		Gamme:     gamme,
 		OrderDate: orderDate,
 	}
 	if note != "" {

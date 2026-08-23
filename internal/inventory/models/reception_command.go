@@ -9,6 +9,8 @@ type ReceptionCommand struct {
 	RegisteredCount int        `db:"registered_count" json:"registered_count"`
 	Status          string     `db:"status" json:"status"`
 	SupplierOrderID *int64     `db:"supplier_order_id" json:"supplier_order_id,omitempty"`
+	OrderGender     string     `db:"order_gender" json:"gender,omitempty"`
+	OrderGamme      string     `db:"order_gamme" json:"gamme,omitempty"`
 	CreatedBy       *int64     `db:"created_by" json:"created_by,omitempty"`
 	ActivatedAt     *time.Time `db:"activated_at" json:"activated_at,omitempty"`
 	CreatedAt       time.Time  `db:"created_at" json:"created_at"`

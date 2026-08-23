@@ -49,8 +49,10 @@ func (r *ReceptionCommandRepository) GetLatestCodeWithPrefix(prefix string) (str
 func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionCommand, error) {
 	commands := []models.ReceptionCommand{}
 	query := `
-        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, activated_at, created_at, updated_at
-        FROM reception_commands
+	SELECT rc.id, rc.code, rc.target_count, rc.registered_count, rc.status, rc.supplier_order_id, rc.created_by, rc.activated_at, rc.created_at, rc.updated_at,
+	       so.gender AS order_gender, so.gamme AS order_gamme
+	FROM reception_commands rc
+	LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
     `
 	args := []interface{}{}
 	if status != "" {
@@ -67,8 +69,10 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
-        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, activated_at, created_at, updated_at
-        FROM reception_commands
+	SELECT rc.id, rc.code, rc.target_count, rc.registered_count, rc.status, rc.supplier_order_id, rc.created_by, rc.activated_at, rc.created_at, rc.updated_at,
+	       so.gender AS order_gender, so.gamme AS order_gamme
+	FROM reception_commands rc
+	LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
         WHERE code = $1
     `, strings.ToUpper(strings.TrimSpace(code)))
 	if err != nil {
@@ -107,8 +111,10 @@ func (r *ReceptionCommandRepository) Activate(code string) (*models.ReceptionCom
 func (r *ReceptionCommandRepository) Increment(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
-        SELECT id, code, target_count, registered_count, status, supplier_order_id, created_by, activated_at, created_at, updated_at
-        FROM reception_commands
+	SELECT rc.id, rc.code, rc.target_count, rc.registered_count, rc.status, rc.supplier_order_id, rc.created_by, rc.activated_at, rc.created_at, rc.updated_at,
+	       so.gender AS order_gender, so.gamme AS order_gamme
+	FROM reception_commands rc
+	LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
         WHERE code = $1
     `, strings.ToUpper(strings.TrimSpace(code)))
 	if err != nil {
