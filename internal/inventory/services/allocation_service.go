@@ -175,9 +175,17 @@ func (s *AllocationService) findOrCreateLocation(stationID int64, zone models.Zo
 	if location, err := s.FindFreeLocation(stationID, zone); err == nil {
 		return location, nil
 	}
+	lookupStationID := stationID
+	if zone == models.ZoneStock {
+		resolved, err := s.resolveStorageStationID(stationID)
+		if err != nil {
+			return nil, err
+		}
+		lookupStationID = resolved
+	}
 
 	var count int
-	if err := s.db.Get(&count, `SELECT COUNT(*) FROM storage_locations WHERE station_id = $1 AND zone = $2`, stationID, zone); err != nil {
+	if err := s.db.Get(&count, `SELECT COUNT(*) FROM storage_locations WHERE station_id = $1 AND zone = $2`, lookupStationID, zone); err != nil {
 		return nil, fmt.Errorf("impossible de compter les emplacements existants (zone %s): %w", zone, err)
 	}
 

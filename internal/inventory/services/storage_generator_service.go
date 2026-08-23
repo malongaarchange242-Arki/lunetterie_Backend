@@ -65,13 +65,25 @@ func (s *StorageGeneratorService) GetLocationPath(locationID int64) (string, str
 // même règle que AllocationService.FindFreeLocation, pour que cet aperçu montre exactement
 // l'emplacement que l'enregistrement va réellement attribuer.
 func (s *StorageGeneratorService) PeekFreeLocation(stationID int64, zone models.ZoneType) (int64, string, string, error) {
+	lookupStationID := stationID
+	if zone == models.ZoneStock {
+		if err := s.db.Get(&lookupStationID, `
+			SELECT id
+			FROM stations
+			WHERE city = (SELECT city FROM stations WHERE id = $1)
+			  AND name ILIKE 'Stock Général%'
+			ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, id
+			LIMIT 1`, stationID); err != nil {
+			return 0, "", "", fmt.Errorf("impossible de trouver le stock physique: %w", err)
+		}
+	}
 	var location models.StorageLocation
 	err := s.db.Get(&location, `
 		SELECT id, station_id, code, type, zone, status
 		FROM storage_locations
 		WHERE station_id = $1 AND zone = $2 AND type = 'POSITION' AND status = 'LIBRE'
 		ORDER BY code
-		LIMIT 1`, stationID, zone)
+		LIMIT 1`, lookupStationID, zone)
 	if err != nil {
 		return 0, "", "", fmt.Errorf("aucun emplacement libre: aucune position disponible")
 	}
