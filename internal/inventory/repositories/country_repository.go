@@ -19,7 +19,7 @@ func NewCountryRepository(db *sqlx.DB) *CountryRepository {
 func (r *CountryRepository) ListCountries() ([]models.Country, error) {
 	countries := []models.Country{}
 	err := r.db.Select(&countries, `
-		SELECT id, nom, code
+		SELECT id, nom, COALESCE(code, '') AS code
 		FROM pays
 		ORDER BY nom ASC
 	`)
