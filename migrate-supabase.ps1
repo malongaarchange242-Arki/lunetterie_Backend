@@ -5,18 +5,26 @@ $env:PGPASSWORD = "3C1JtEZ1xdeT9QNl"
 
 Write-Host "🔄 Exécution des migrations sur Supabase..." -ForegroundColor Green
 
-# Exécuter le fichier de migration
-psql -h db.okhofmjabstbnpwuqunt.supabase.co `
-     -p 5432 `
-     -U postgres `
-     -d postgres `
-     -f "d:\Pojet la lunetterie\backend\migrations\001_init.up.sql"
+$migrationDirectory = Join-Path $PSScriptRoot "migrations"
+$migrationFiles = Get-ChildItem -Path $migrationDirectory -Filter "*.up.sql" | Sort-Object Name
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Migrations exécutées avec succès!" -ForegroundColor Green
-} else {
-    Write-Host "❌ Erreur lors de l'exécution des migrations" -ForegroundColor Red
+foreach ($migrationFile in $migrationFiles) {
+    Write-Host "▶ $($migrationFile.Name)" -ForegroundColor Cyan
+    psql -h db.okhofmjabstbnpwuqunt.supabase.co `
+         -p 5432 `
+         -U postgres `
+         -d postgres `
+         -v ON_ERROR_STOP=1 `
+         -f $migrationFile.FullName
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Échec de la migration $($migrationFile.Name)" -ForegroundColor Red
+        Remove-Item Env:\PGPASSWORD
+        exit $LASTEXITCODE
+    }
 }
+
+Write-Host "✅ Toutes les migrations ont été exécutées avec succès!" -ForegroundColor Green
 
 # Nettoyer la variable temporaire
 Remove-Item Env:\PGPASSWORD
