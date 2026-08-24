@@ -56,10 +56,10 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
     `
 	args := []interface{}{}
 	if status != "" {
-		query += " WHERE status = $1"
+		query += " WHERE rc.status = $1"
 		args = append(args, status)
 	}
-	query += " ORDER BY created_at DESC"
+	query += " ORDER BY rc.created_at DESC"
 	if err := r.db.Select(&commands, query, args...); err != nil {
 		return nil, fmt.Errorf("impossible de lister les commandes: %w", err)
 	}
@@ -73,7 +73,7 @@ func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCo
 	       so.gender AS order_gender, so.gamme AS order_gamme
 	FROM reception_commands rc
 	LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
-        WHERE code = $1
+		WHERE rc.code = $1
     `, strings.ToUpper(strings.TrimSpace(code)))
 	if err != nil {
 		if err == sql.ErrNoRows {
