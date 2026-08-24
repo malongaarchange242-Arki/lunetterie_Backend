@@ -111,41 +111,22 @@ func (r *ReceptionCommandRepository) Activate(code string) (*models.ReceptionCom
 func (r *ReceptionCommandRepository) Increment(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand
 	err := r.db.Get(&command, `
-	SELECT rc.id, rc.code, rc.target_count, rc.registered_count, rc.status, rc.supplier_order_id, rc.created_by, rc.activated_at, rc.created_at, rc.updated_at,
-	       so.gender AS order_gender, so.gamme AS order_gamme
-	FROM reception_commands rc
-	LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
-        WHERE code = $1
-    `, strings.ToUpper(strings.TrimSpace(code)))
+		UPDATE reception_commands rc
+		SET registered_count = LEAST(rc.target_count, rc.registered_count + 1),
+		    status = CASE WHEN rc.registered_count + 1 >= rc.target_count THEN 'completed' ELSE rc.status END,
+		    updated_at = NOW()
+		WHERE rc.code = $1
+		  AND rc.status = 'active'
+		  AND rc.registered_count < rc.target_count
+		RETURNING rc.id, rc.code, rc.target_count, rc.registered_count, rc.status,
+		          rc.supplier_order_id, rc.created_by, rc.activated_at, rc.created_at, rc.updated_at,
+		          ''::varchar AS order_gender, ''::varchar AS order_gamme
+	`, strings.ToUpper(strings.TrimSpace(code)))
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, fmt.Errorf("session introuvable, fermée ou quota atteint")
 		}
 		return nil, fmt.Errorf("impossible de récupérer la commande: %w", err)
-	}
-	if command.Status != "active" {
-		return &command, nil
-	}
-	if command.RegisteredCount >= command.TargetCount {
-		command.Status = "completed"
-		_, err = r.db.Exec(`
-            UPDATE reception_commands
-            SET registered_count = $1, status = $2, updated_at = NOW()
-            WHERE id = $3
-        `, command.RegisteredCount, command.Status, command.ID)
-		return &command, err
-	}
-	command.RegisteredCount++
-	if command.RegisteredCount >= command.TargetCount {
-		command.Status = "completed"
-	}
-	_, err = r.db.Exec(`
-        UPDATE reception_commands
-        SET registered_count = $1, status = $2, updated_at = NOW()
-        WHERE id = $3
-    `, command.RegisteredCount, command.Status, command.ID)
-	if err != nil {
-		return nil, fmt.Errorf("impossible de mettre à jour la commande: %w", err)
 	}
 	return &command, nil
 }

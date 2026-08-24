@@ -53,7 +53,7 @@ func (h *ExpeditionHandler) Create(c *gin.Context) {
 	if gamme == "" {
 		gamme = "classique"
 	}
-	if gamme != "classique" && gamme != "moyenne" && gamme != "luxe" && gamme != "panache" {
+	if gamme != "classique" && gamme != "moyenne" && gamme != "luxe" && gamme != "panache" && gamme != "lecture" && gamme != "solaire" && gamme != "securite" {
 		shared.BadRequest(c, "gamme invalide")
 		return
 	}
