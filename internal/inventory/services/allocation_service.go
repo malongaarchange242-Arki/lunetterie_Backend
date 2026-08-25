@@ -285,39 +285,30 @@ func (s *AllocationService) findOrCreateLocation(
 	}
 
 	// ------------------------------------------------------------
-	// 3. Compter les emplacements existants
+	// 3. Créer un nouvel emplacement
 	// ------------------------------------------------------------
 
-	var count int
-
-	err := s.db.Get(
-		&count,
-		`
-		SELECT COUNT(*)
-		FROM storage_locations
-		WHERE station_id = $1
-		  AND zone = $2
-		`,
-		lookupStationID,
-		zone,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf(
-			"impossible de compter les emplacements existants (zone %s): %w",
+	var lastErr error
+	for attempt := 1; attempt <= 100; attempt++ {
+		var count int
+		err := s.db.Get(
+			&count,
+			`
+			SELECT COUNT(*)
+			FROM storage_locations
+			WHERE station_id = $1
+			  AND zone = $2
+			`,
+			lookupStationID,
 			zone,
-			err,
 		)
-	}
-
-	// ------------------------------------------------------------
-	// 4. Créer un nouvel emplacement
-	// ------------------------------------------------------------
-
-	// Petite boucle de retry en cas de concurrence :
-	// deux réceptions peuvent essayer de créer le même emplacement
-	// simultanément.
-	for attempt := 1; attempt <= 5; attempt++ {
+		if err != nil {
+			return nil, fmt.Errorf(
+				"impossible de compter les emplacements existants (zone %s): %w",
+				zone,
+				err,
+			)
+		}
 
 		code := genericLocationCode(count + attempt)
 
@@ -364,7 +355,7 @@ func (s *AllocationService) findOrCreateLocation(
 		//
 		// Le COUNT et l'INSERT doivent travailler sur la même station
 		// physique.
-		err := s.db.Get(
+		err = s.db.Get(
 			&location,
 			query,
 			lookupStationID,
@@ -375,6 +366,7 @@ func (s *AllocationService) findOrCreateLocation(
 		if err == nil {
 			return &location, nil
 		}
+		lastErr = err
 	}
 
 	// ------------------------------------------------------------
@@ -382,9 +374,10 @@ func (s *AllocationService) findOrCreateLocation(
 	// ------------------------------------------------------------
 
 	return nil, fmt.Errorf(
-		"impossible de créer un emplacement (zone %s) pour la station #%d",
+		"impossible de créer un emplacement (zone %s) pour la station #%d après 100 tentatives: %w",
 		zone,
 		stationID,
+		lastErr,
 	)
 }
 
