@@ -1,6 +1,8 @@
 package services
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -306,6 +308,10 @@ func (s *AllocationService) findOrCreateLocation(
 			FROM storage_locations
 			WHERE station_id = $1
 			  AND zone = $2
+			  AND (
+					$2 <> 'STOCK'
+					OR (type = 'POSITION' AND code LIKE 'AUTO-STOCK-%')
+				  )
 			`,
 			lookupStationID,
 			zone,
@@ -319,6 +325,10 @@ func (s *AllocationService) findOrCreateLocation(
 		}
 
 		code := genericLocationCode(count + attempt)
+
+		if zone == models.ZoneStock {
+			code = fmt.Sprintf("AUTO-STOCK-%06d", count+attempt)
+		}
 
 		if zone == models.ZonePresentoir {
 			code = presentoirLocationCode(count + attempt)
@@ -373,6 +383,13 @@ func (s *AllocationService) findOrCreateLocation(
 
 		if err == nil {
 			return &location, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf(
+				"impossible d'insérer l'emplacement (zone %s): %w",
+				zone,
+				err,
+			)
 		}
 		lastErr = err
 	}
