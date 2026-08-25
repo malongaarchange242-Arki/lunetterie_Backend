@@ -149,6 +149,14 @@ func (s *AllocationService) FindFreeLocationNearCode(
 	zone models.ZoneType,
 	baseCode string,
 ) (*models.StorageLocation, error) {
+	lookupStationID := stationID
+	if zone == models.ZoneStock {
+		resolved, err := s.resolveStorageStationID(stationID)
+		if err != nil {
+			return nil, err
+		}
+		lookupStationID = resolved
+	}
 
 	prefix := codePrefix(baseCode)
 
@@ -179,7 +187,7 @@ func (s *AllocationService) FindFreeLocationNearCode(
 	err := s.db.Get(
 		&location,
 		query,
-		stationID,
+		lookupStationID,
 		zone,
 		prefix+"-%",
 	)
