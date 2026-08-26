@@ -130,44 +130,71 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 	return commands, nil
 }
 
-// Delete supprime une session de réception tant qu'aucune monture n'y est attachée.
-// Une session déjà utilisée fait partie de la traçabilité du stock : on refuse de
-// l'effacer plutôt que de détacher silencieusement ses montures.
+// Delete supprime une session de réception et les montures qui y ont été enregistrées.
+// C'est une suppression administrative complète : on retire d'abord les tables qui
+// référencent glasses en RESTRICT, puis les montures, puis la session.
 func (r *ReceptionCommandRepository) Delete(id int64) error {
-	result, err := r.db.Exec(
-		`
-			DELETE FROM reception_commands
-			WHERE id = $1
-			  AND registered_count = 0
-			  AND NOT EXISTS (
-				  SELECT 1
-				  FROM glasses g
-				  WHERE g.reception_command_id = reception_commands.id
-			  )
-		`,
-		id,
-	)
+	tx, err := r.db.Beginx()
 	if err != nil {
-		return fmt.Errorf("impossible de supprimer la session de réception: %w", err)
+		return fmt.Errorf("impossible de démarrer la suppression de la session: %w", err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("impossible de vérifier la suppression: %w", err)
-	}
-	if rowsAffected > 0 {
-		return nil
-	}
+	defer tx.Rollback()
 
 	var exists bool
-	if err := r.db.Get(&exists, `SELECT EXISTS (SELECT 1 FROM reception_commands WHERE id = $1)`, id); err != nil {
+	if err := tx.Get(&exists, `SELECT EXISTS (SELECT 1 FROM reception_commands WHERE id = $1)`, id); err != nil {
 		return fmt.Errorf("impossible de vérifier la session de réception: %w", err)
 	}
 	if !exists {
 		return sql.ErrNoRows
 	}
 
-	return fmt.Errorf("session de réception déjà utilisée")
+	dependentDeletes := []string{
+		`
+			WITH deleted AS (
+				DELETE FROM transfer_items
+				WHERE glass_id IN (SELECT id FROM glasses WHERE reception_command_id = $1)
+				RETURNING transfer_id
+			)
+			DELETE FROM transfers
+			WHERE id IN (SELECT transfer_id FROM deleted)
+			  AND NOT EXISTS (SELECT 1 FROM transfer_items WHERE transfer_items.transfer_id = transfers.id)
+		`,
+		`
+			WITH deleted AS (
+				DELETE FROM sale_items
+				WHERE glass_id IN (SELECT id FROM glasses WHERE reception_command_id = $1)
+				RETURNING sale_id
+			)
+			DELETE FROM sales
+			WHERE id IN (SELECT sale_id FROM deleted)
+			  AND NOT EXISTS (SELECT 1 FROM sale_items WHERE sale_items.sale_id = sales.id)
+		`,
+		`
+			WITH deleted AS (
+				DELETE FROM reserve_items
+				WHERE glass_id IN (SELECT id FROM glasses WHERE reception_command_id = $1)
+				RETURNING reserve_id
+			)
+			DELETE FROM reserves
+			WHERE id IN (SELECT reserve_id FROM deleted)
+			  AND NOT EXISTS (SELECT 1 FROM reserve_items WHERE reserve_items.reserve_id = reserves.id)
+		`,
+	}
+	for _, query := range dependentDeletes {
+		if _, err := tx.Exec(query, id); err != nil {
+			return fmt.Errorf("impossible de supprimer les dépendances des montures: %w", err)
+		}
+	}
+
+	if _, err := tx.Exec(`DELETE FROM glasses WHERE reception_command_id = $1`, id); err != nil {
+		return fmt.Errorf("impossible de supprimer les montures de la session: %w", err)
+	}
+
+	if _, err := tx.Exec(`DELETE FROM reception_commands WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("impossible de supprimer la session de réception: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // GetByCode récupère une session à partir de son code.

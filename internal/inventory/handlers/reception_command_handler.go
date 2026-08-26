@@ -105,10 +105,6 @@ func (h *ReceptionCommandHandler) Delete(c *gin.Context) {
 			shared.NotFound(c, "session de réception introuvable")
 			return
 		}
-		if strings.Contains(err.Error(), "déjà utilisée") {
-			shared.BadRequest(c, "Impossible de supprimer une session qui contient déjà des montures enregistrées")
-			return
-		}
 		shared.InternalError(c, err.Error())
 		return
 	}
