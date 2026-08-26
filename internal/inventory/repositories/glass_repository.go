@@ -94,7 +94,7 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 	// valeur zéro de Go et l'écran affiche « 0001-01-01 » — une date que personne ne
 	// reconnaît comme une absence.
 	query := `
-		SELECT g.id, g.barcode, g.station_id, g.status, g.price, g.created_at,
+		SELECT g.id, g.barcode, g.station_id, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
@@ -157,9 +157,13 @@ const registrationJoin = `
 
 // FindByStatuses liste les montures filtrées par statut, toutes stations confondues.
 func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListItem, error) {
+	return r.FindByStatusesFiltered(statuses, false)
+}
+
+func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOnly bool) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
 	query := `
-		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
@@ -173,7 +177,12 @@ func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListI
 		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id` + registrationJoin + `
-		WHERE g.status = ANY($1)
+		WHERE g.status = ANY($1)`
+	if registeredOnly {
+		query += `
+		  AND g.reception_command_id IS NOT NULL`
+	}
+	query += `
 		ORDER BY g.created_at DESC`
 	if err := r.db.Select(&items, query, pq.Array(statuses)); err != nil {
 		return nil, fmt.Errorf("impossible de récupérer les montures: %w", err)
@@ -184,7 +193,7 @@ func (r *GlassRepository) FindByStatuses(statuses []string) ([]models.GlassListI
 func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
 	query := `
-		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
@@ -205,7 +214,7 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassListItem, error) {
 	var item models.GlassListItem
 	query := `
-		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
@@ -235,7 +244,7 @@ var availableStatuses = []string{
 func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.GlassListItem, error) {
 	items := []models.GlassListItem{}
 	query := `
-		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at,
+		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url, g.photo_branche_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code

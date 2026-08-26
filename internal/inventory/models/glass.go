@@ -27,23 +27,24 @@ type Glass struct {
 
 // GlassListItem représente une monture pour affichage en liste (jointure glasses + glass_analysis + storage_locations)
 type GlassListItem struct {
-	ID              int64     `db:"id" json:"id"`
-	Barcode         string    `db:"barcode" json:"barcode"`
-	StationID       int64     `db:"station_id" json:"station_id"`
-	StationName     *string   `db:"station_name" json:"station_name,omitempty"`
-	Status          string    `db:"status" json:"status"`
-	Price           *float64  `db:"price" json:"price,omitempty"`
-	CreatedAt       time.Time `db:"created_at" json:"created_at"`
-	Reference       *string   `db:"reference" json:"reference,omitempty"`
-	Brand           *string   `db:"brand" json:"brand,omitempty"`
-	Gender          *string   `db:"gender" json:"gender,omitempty"`
-	Shape           *string   `db:"shape" json:"shape,omitempty"`
-	Color           *string   `db:"color" json:"color,omitempty"`
-	Size            *string   `db:"size" json:"size,omitempty"`
-	Material        *string   `db:"material" json:"material,omitempty"`
-	LocationCode    *string   `db:"location_code" json:"location_code,omitempty"`
-	PhotoMontureURL *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
-	PhotoBrancheURL *string   `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
+	ID                 int64     `db:"id" json:"id"`
+	Barcode            string    `db:"barcode" json:"barcode"`
+	StationID          int64     `db:"station_id" json:"station_id"`
+	StationName        *string   `db:"station_name" json:"station_name,omitempty"`
+	Status             string    `db:"status" json:"status"`
+	Price              *float64  `db:"price" json:"price,omitempty"`
+	CreatedAt          time.Time `db:"created_at" json:"created_at"`
+	Reference          *string   `db:"reference" json:"reference,omitempty"`
+	Brand              *string   `db:"brand" json:"brand,omitempty"`
+	Gender             *string   `db:"gender" json:"gender,omitempty"`
+	Shape              *string   `db:"shape" json:"shape,omitempty"`
+	Color              *string   `db:"color" json:"color,omitempty"`
+	Size               *string   `db:"size" json:"size,omitempty"`
+	Material           *string   `db:"material" json:"material,omitempty"`
+	LocationCode       *string   `db:"location_code" json:"location_code,omitempty"`
+	PhotoMontureURL    *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
+	PhotoBrancheURL    *string   `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
+	ReceptionCommandID *int64    `db:"reception_command_id" json:"reception_command_id,omitempty"`
 	// Ville de la liste d'envoi qui réserve cette monture (statut RESERVEE_ENVOI), tant que
 	// cette liste n'est pas TRAITEE. Nul pour tout autre statut.
 	ReservedForCity *string `db:"reserved_for_city" json:"reserved_for_city,omitempty"`

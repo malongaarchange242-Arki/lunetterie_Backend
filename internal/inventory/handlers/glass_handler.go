@@ -53,7 +53,8 @@ func (h *GlassHandler) ListGlasses(c *gin.Context) {
 		}
 		glasses, err = h.repo.FindByStationAndStatuses(stationID, statuses)
 	} else {
-		glasses, err = h.repo.FindByStatuses(statuses)
+		registeredOnly := c.Query("registered_only") == "1" || strings.EqualFold(c.Query("registered_only"), "true")
+		glasses, err = h.repo.FindByStatusesFiltered(statuses, registeredOnly)
 	}
 	if err != nil {
 		shared.InternalError(c, "Impossible de récupérer les montures")
