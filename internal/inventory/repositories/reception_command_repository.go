@@ -130,6 +130,46 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 	return commands, nil
 }
 
+// Delete supprime une session de réception tant qu'aucune monture n'y est attachée.
+// Une session déjà utilisée fait partie de la traçabilité du stock : on refuse de
+// l'effacer plutôt que de détacher silencieusement ses montures.
+func (r *ReceptionCommandRepository) Delete(id int64) error {
+	result, err := r.db.Exec(
+		`
+			DELETE FROM reception_commands
+			WHERE id = $1
+			  AND registered_count = 0
+			  AND NOT EXISTS (
+				  SELECT 1
+				  FROM glasses g
+				  WHERE g.reception_command_id = reception_commands.id
+			  )
+		`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("impossible de supprimer la session de réception: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("impossible de vérifier la suppression: %w", err)
+	}
+	if rowsAffected > 0 {
+		return nil
+	}
+
+	var exists bool
+	if err := r.db.Get(&exists, `SELECT EXISTS (SELECT 1 FROM reception_commands WHERE id = $1)`, id); err != nil {
+		return fmt.Errorf("impossible de vérifier la session de réception: %w", err)
+	}
+	if !exists {
+		return sql.ErrNoRows
+	}
+
+	return fmt.Errorf("session de réception déjà utilisée")
+}
+
 // GetByCode récupère une session à partir de son code.
 func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCommand, error) {
 	var command models.ReceptionCommand

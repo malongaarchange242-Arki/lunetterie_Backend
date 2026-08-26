@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -90,6 +91,29 @@ func (h *ReceptionCommandHandler) List(c *gin.Context) {
 		return
 	}
 	shared.Success(c, http.StatusOK, gin.H{"commands": commands})
+}
+
+func (h *ReceptionCommandHandler) Delete(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "id invalide")
+		return
+	}
+
+	if err := h.repo.Delete(id); err != nil {
+		if err == sql.ErrNoRows {
+			shared.NotFound(c, "session de réception introuvable")
+			return
+		}
+		if strings.Contains(err.Error(), "déjà utilisée") {
+			shared.BadRequest(c, "Impossible de supprimer une session qui contient déjà des montures enregistrées")
+			return
+		}
+		shared.InternalError(c, err.Error())
+		return
+	}
+
+	shared.Success(c, http.StatusOK, gin.H{"deleted": true})
 }
 
 func (h *ReceptionCommandHandler) GetByCode(c *gin.Context) {
