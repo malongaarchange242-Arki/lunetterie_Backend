@@ -53,6 +53,18 @@ type GlassListItem struct {
 	RegisteredBy *string `db:"registered_by" json:"registered_by,omitempty"`
 }
 
+type GlassAnalysisRepairCandidate struct {
+	ID              int64   `db:"id" json:"id"`
+	Barcode         string  `db:"barcode" json:"barcode"`
+	PhotoMontureURL string  `db:"photo_monture_url" json:"photo_monture_url"`
+	PhotoBrancheURL string  `db:"photo_branche_url" json:"photo_branche_url"`
+	AnalysisID      *int64  `db:"analysis_id" json:"analysis_id,omitempty"`
+	Reference       *string `db:"reference" json:"reference,omitempty"`
+	Brand           *string `db:"brand" json:"brand,omitempty"`
+	Shape           *string `db:"shape" json:"shape,omitempty"`
+	Gender          *string `db:"gender" json:"gender,omitempty"`
+}
+
 // SimilarGlass représente une monture candidate au classement de similarité, avec le score
 // composite (genre/forme/prix) et son détail par critère pour transparence côté UI.
 type SimilarGlass struct {

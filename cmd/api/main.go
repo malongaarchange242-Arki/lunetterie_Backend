@@ -238,6 +238,7 @@ func main() {
 	movementHandler := inventoryHandlers.NewMovementHandler(movementRepo)
 	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
+	repairHandler := inventoryHandlers.NewRepairHandler(glassRepo, analysisSvc, aiSvc)
 	chatHandler := inventoryHandlers.NewChatHandler(aiSvc)
 	authHandler := authHandlers.NewAuthHandler(userRepo, stationRepo, authSvc, webauthnSvc)
 	webauthnHandler := authHandlers.NewWebAuthnHandler(webauthnSvc, authSvc)
@@ -561,6 +562,7 @@ func main() {
 			}
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
 			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
+			inventory.POST("/repairs/lun-cng-analysis", authMiddleware.RequireRoles(1, 2, 8, 12), repairHandler.RepairLunCngAnalysis)
 			inventory.GET("/glasses", glassHandler.ListGlasses)
 			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
 			inventory.GET("/glasses/:barcode/similar", glassHandler.GetSimilarGlasses)

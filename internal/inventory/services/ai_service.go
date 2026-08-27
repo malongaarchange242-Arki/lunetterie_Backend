@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"strings"
+	"time"
 
 	"github.com/lunetterie/backend/internal/inventory/dto"
 )
@@ -21,7 +22,7 @@ type AIService struct {
 
 // NewAIService crée une nouvelle instance
 func NewAIService(baseURL string) *AIService {
-	return &AIService{baseURL: baseURL, httpClient: &http.Client{}}
+	return &AIService{baseURL: baseURL, httpClient: &http.Client{Timeout: 90 * time.Second}}
 }
 
 // rawAnalysisResponse reflète le schéma réellement renvoyé par POST /glasses/analyze

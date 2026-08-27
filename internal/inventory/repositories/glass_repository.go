@@ -209,6 +209,44 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 	return items, nil
 }
 
+func (r *GlassRepository) FindLunCngAnalysisRepairCandidates(limit int) ([]models.GlassAnalysisRepairCandidate, error) {
+	if limit < 1 || limit > 100 {
+		limit = 25
+	}
+
+	items := []models.GlassAnalysisRepairCandidate{}
+	query := `
+		SELECT
+			g.id,
+			g.barcode,
+			COALESCE(g.photo_monture_url, '') AS photo_monture_url,
+			COALESCE(g.photo_branche_url, '') AS photo_branche_url,
+			g.analysis_id,
+			ga.reference,
+			ga.brand,
+			ga.shape,
+			ga.gender
+		FROM glasses g
+		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		WHERE g.barcode LIKE 'LUN-CNG-%'
+		  AND g.reception_command_id IS NOT NULL
+		  AND COALESCE(g.photo_monture_url, '') <> ''
+		  AND COALESCE(g.photo_branche_url, '') <> ''
+		  AND COALESCE(ga.model_version, '') NOT IN ('repair-lun-cng-1.0.0', 'repair-img-err-1.0')
+		  AND (
+			NULLIF(TRIM(COALESCE(ga.reference, '')), '') IS NULL
+			OR NULLIF(TRIM(COALESCE(ga.brand, '')), '') IS NULL
+			OR NULLIF(TRIM(COALESCE(ga.shape, '')), '') IS NULL
+			OR NULLIF(TRIM(COALESCE(ga.gender, '')), '') IS NULL
+		  )
+		ORDER BY g.created_at ASC, g.id ASC
+		LIMIT $1`
+	if err := r.db.Select(&items, query, limit); err != nil {
+		return nil, fmt.Errorf("impossible de récupérer les montures à réparer: %w", err)
+	}
+	return items, nil
+}
+
 // FindDetailByBarcode recherche une monture par code-barres (toutes stations confondues),
 // avec ses attributs issus de l'analyse IA/vérification et son emplacement actuel.
 func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassListItem, error) {
