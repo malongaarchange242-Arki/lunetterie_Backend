@@ -104,6 +104,7 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 			END AS pre_registration_status,
 
 			COALESCE(so.gender, '') AS order_gender,
+			COALESCE(so.provenance, so.supplier, '') AS order_provenance,
 			COALESCE(so.gamme, '') AS order_gamme
 
 		FROM reception_commands rc
@@ -233,6 +234,7 @@ func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCo
 				END AS pre_registration_status,
 
 				COALESCE(so.gender, '') AS order_gender,
+				COALESCE(so.provenance, so.supplier, '') AS order_provenance,
 				COALESCE(so.gamme, '') AS order_gamme
 
 			FROM reception_commands rc
@@ -389,6 +391,7 @@ func (r *ReceptionCommandRepository) ListArrivedCommands() ([]models.ReceptionCo
 				ELSE 'not_started'
 			END AS pre_registration_status,
 			COALESCE(so.gender, '') AS order_gender,
+			COALESCE(so.provenance, so.supplier, '') AS order_provenance,
 			COALESCE(so.gamme, '') AS order_gamme
 		FROM reception_commands rc
 		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
@@ -419,6 +422,7 @@ func (r *ReceptionCommandRepository) ListShipmentCommands() ([]models.ReceptionC
 				ELSE 'not_started'
 			END AS pre_registration_status,
 			COALESCE(so.gender, '') AS order_gender,
+			COALESCE(so.provenance, so.supplier, '') AS order_provenance,
 			COALESCE(so.gamme, '') AS order_gamme
 		FROM reception_commands rc
 		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id

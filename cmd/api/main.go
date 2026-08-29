@@ -317,6 +317,15 @@ func main() {
 				break
 			}
 		}
+		// Les maquettes HTML sont parfois ouvertes directement via file://. Dans ce
+		// cas, le navigateur transmet l'origine "null". Ne l'accepter que pour
+		// l'API locale : l'API publiée ne doit jamais répondre à cette origine.
+		if origin == "null" && strings.HasPrefix(c.Request.Host, "localhost:") {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+			isAllowedOrigin = true
+		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type")
@@ -459,6 +468,18 @@ func main() {
 			}
 		}
 
+		mobileCapture := v1.Group("/inventory/mobile-capture")
+		{
+			mobileCapture.POST("/sessions", authMiddleware.RequireAuth(identityAuthSvc), mobileCaptureHandler.Create)
+			mobileCapture.GET("/sessions/:id/qr", mobileCaptureHandler.QR)
+			mobileCapture.GET("/sessions/:id/events", mobileCaptureHandler.Events)
+			mobileCapture.POST("/sessions/:id/connect", mobileCaptureHandler.Connect)
+			mobileCapture.POST("/sessions/:id/scan", mobileCaptureHandler.Scan)
+			mobileCapture.POST("/sessions/:id/photo", mobileCaptureHandler.UploadPhoto)
+			mobileCapture.GET("/sessions/:id/photo", mobileCaptureHandler.Photo)
+			mobileCapture.DELETE("/sessions/:id", mobileCaptureHandler.Close)
+		}
+
 		inventory := v1.Group("/inventory")
 		inventory.Use(authMiddleware.RequireAuth(identityAuthSvc))
 		{
@@ -561,18 +582,8 @@ func main() {
 			// qui enregistrent : chaque appel consomme un numéro de la séquence, l'ouvrir à
 			// tout compte authentifié laisserait n'importe quel écran en brûler.
 			inventory.GET("/barcodes/next", authMiddleware.RequireRoles(1, 2, 3, 8, 12), barcodeHandler.Next)
+			inventory.GET("/labels/*code", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), barcodeHandler.Label)
 			inventory.POST("/reception", receptionHandler.HandleReception)
-			mobileCapture := inventory.Group("/mobile-capture")
-			{
-				mobileCapture.POST("/sessions", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), mobileCaptureHandler.Create)
-				mobileCapture.GET("/sessions/:id/qr", mobileCaptureHandler.QR)
-				mobileCapture.GET("/sessions/:id/events", mobileCaptureHandler.Events)
-				mobileCapture.POST("/sessions/:id/connect", mobileCaptureHandler.Connect)
-				mobileCapture.POST("/sessions/:id/scan", mobileCaptureHandler.Scan)
-				mobileCapture.POST("/sessions/:id/photo", mobileCaptureHandler.UploadPhoto)
-				mobileCapture.GET("/sessions/:id/photo", mobileCaptureHandler.Photo)
-				mobileCapture.DELETE("/sessions/:id", mobileCaptureHandler.Close)
-			}
 			// Créer une session de réception reste réservé à la direction/admin ; la lister,
 			// consulter un code précis et l'incrémenter sont ouverts aux rôles qui traitent
 			// physiquement les montures, dont PRE_ENREGISTREMENT (rôle 11).
@@ -593,7 +604,10 @@ func main() {
 				receptionCommands.POST("/:code/increment", receptionCommandHandler.Increment)
 				receptionCommands.GET("/:code/cases", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.ListCases)
 				receptionCommands.POST("/:code/cases", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.CreateCase)
+				receptionCommands.DELETE("/cases/:caseId", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.DeleteCase)
 				receptionCommands.POST("/cases/:caseId/boxes", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.CreateBox)
+				receptionCommands.GET("/cases/:caseId/boxes/:boxId", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.ScanBox)
+				receptionCommands.DELETE("/cases/:caseId/boxes/:boxId", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.DeleteBox)
 				receptionCommands.POST("/:code/dispatch", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.Dispatch)
 				receptionCommands.POST("/cases/:caseId/scan", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.ScanCase)
 				receptionCommands.POST("/:code/arrived", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.MarkArrived)

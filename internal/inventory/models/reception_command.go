@@ -14,6 +14,7 @@ type ReceptionCommand struct {
 	ArrivedAt             *time.Time `db:"arrived_at" json:"arrived_at,omitempty"`
 	SupplierOrderID       *int64     `db:"supplier_order_id" json:"supplier_order_id,omitempty"`
 	OrderGender           string     `db:"order_gender" json:"gender,omitempty"`
+	OrderProvenance       string     `db:"order_provenance" json:"provenance,omitempty"`
 	OrderGamme            string     `db:"order_gamme" json:"gamme,omitempty"`
 	CreatedBy             *int64     `db:"created_by" json:"created_by,omitempty"`
 	ActivatedAt           *time.Time `db:"activated_at" json:"activated_at,omitempty"`

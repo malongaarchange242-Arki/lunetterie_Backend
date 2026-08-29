@@ -162,6 +162,51 @@ func (r *PreRegistrationRepository) GetCase(caseID int64) (*models.PreRegistrati
 	return &item, err
 }
 
+func (r *PreRegistrationRepository) GetBox(caseID, boxID int64) (*models.PreRegistrationBox, error) {
+	item, err := r.GetCase(caseID)
+	if err != nil {
+		return nil, err
+	}
+	for index := range item.Cartons {
+		if item.Cartons[index].ID == boxID {
+			return &item.Cartons[index], nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (r *PreRegistrationRepository) DeleteCase(caseID int64) error {
+	result, err := r.db.Exec(`
+		DELETE FROM pre_registration_cases
+		WHERE id = $1 AND validated = false AND shipment_scanned = false`, caseID)
+	if err != nil {
+		return fmt.Errorf("impossible de supprimer la valise: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil || count == 0 {
+		return fmt.Errorf("valise introuvable ou verrouillée")
+	}
+	return nil
+}
+
+func (r *PreRegistrationRepository) DeleteBox(boxID int64) error {
+	result, err := r.db.Exec(`
+		DELETE FROM pre_registration_boxes AS b
+		WHERE b.id = $1
+		  AND EXISTS (
+			SELECT 1 FROM pre_registration_cases AS c
+			WHERE c.id = b.case_id AND c.validated = false AND c.shipment_scanned = false
+		  )`, boxID)
+	if err != nil {
+		return fmt.Errorf("impossible de supprimer le carton: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil || count == 0 {
+		return fmt.Errorf("carton introuvable ou verrouillé")
+	}
+	return nil
+}
+
 func NewPreRegistrationCase(code, couleur, hex, gamme, genre string, montures int) models.PreRegistrationCase {
 	return models.PreRegistrationCase{Code: code, Couleur: couleur, Hex: hex, Gamme: gamme, Genre: genre, Montures: montures, CreatedAt: time.Time{}}
 }

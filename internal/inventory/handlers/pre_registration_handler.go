@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -92,4 +90,49 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 		return
 	}
 	shared.Created(c, gin.H{"case": created, "barcode_image_url": "/api/v1/inventory/labels/" + created.Code + ".png"})
+}
+
+func (h *PreRegistrationHandler) ScanBox(c *gin.Context) {
+	caseID, err := strconv.ParseInt(c.Param("caseId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de valise invalide")
+		return
+	}
+	boxID, err := strconv.ParseInt(c.Param("boxId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de carton invalide")
+		return
+	}
+	box, err := h.repo.GetBox(caseID, boxID)
+	if err != nil {
+		shared.NotFound(c, "Carton introuvable dans cette valise")
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"carton": box})
+}
+
+func (h *PreRegistrationHandler) DeleteCase(c *gin.Context) {
+	caseID, err := strconv.ParseInt(c.Param("caseId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de valise invalide")
+		return
+	}
+	if err := h.repo.DeleteCase(caseID); err != nil {
+		shared.BadRequest(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"deleted": true, "case_id": caseID})
+}
+
+func (h *PreRegistrationHandler) DeleteBox(c *gin.Context) {
+	boxID, err := strconv.ParseInt(c.Param("boxId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de carton invalide")
+		return
+	}
+	if err := h.repo.DeleteBox(boxID); err != nil {
+		shared.BadRequest(c, err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"deleted": true, "box_id": boxID})
 }

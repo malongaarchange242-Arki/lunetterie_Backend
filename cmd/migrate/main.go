@@ -79,6 +79,7 @@ func main() {
 		"migrations/045_supplier_orders_frontend.up.sql",
 		"migrations/047_pre_enregistrement_cases.up.sql",
 		"migrations/048_pre_registration_shipment.up.sql",
+		"migrations/049_container_barcode_sequences.up.sql",
 		"migrations/014_seed_directeur.up.sql",
 	}
 

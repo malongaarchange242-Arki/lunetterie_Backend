@@ -139,6 +139,7 @@ func (h *Handler) QR(c *gin.Context) {
 	if !ok {
 		return
 	}
+	c.Header("Cross-Origin-Resource-Policy", "cross-origin")
 	content := fmt.Sprintf("%s/mobile-capture.html#session=%s&token=%s", publicBase(c), s.ID, s.DeviceToken)
 	code, err := qr.Encode(content, qr.M, qr.Auto)
 	if err != nil {
@@ -162,7 +163,9 @@ func (h *Handler) Events(c *gin.Context) {
 	if !ok {
 		return
 	}
-	websocket.Handler(func(ws *websocket.Conn) {
+	server := websocket.Server{
+		Handshake: func(*websocket.Config, *http.Request) error { return nil },
+		Handler: func(ws *websocket.Conn) {
 		ch := h.manager.subscribe(s)
 		defer h.manager.unsubscribe(s, ch)
 		for event := range ch {
@@ -170,7 +173,9 @@ func (h *Handler) Events(c *gin.Context) {
 				return
 			}
 		}
-	}).ServeHTTP(c.Writer, c.Request)
+		},
+	}
+	server.ServeHTTP(c.Writer, c.Request)
 }
 func (h *Handler) Connect(c *gin.Context) {
 	s, ok := h.sessionFrom(c, false)

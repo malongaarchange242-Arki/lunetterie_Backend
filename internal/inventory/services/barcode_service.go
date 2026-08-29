@@ -1,11 +1,19 @@
 package services
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/code128"
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/math/fixed"
 )
 
 // BarcodeService gère la génération de code-barres
@@ -51,7 +59,21 @@ func (s *BarcodeService) GenerateBarcodeImage(code string) ([]byte, error) {
 		return nil, fmt.Errorf("erreur redimensionnement: %w", err)
 	}
 
-	// TODO: Convertir en PNG
-	_ = scaledBarcode
-	return nil, fmt.Errorf("encodage PNG à implémenter")
+	label := image.NewRGBA(image.Rect(0, 0, 300, 130))
+	draw.Draw(label, label.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(label, image.Rect(0, 0, scaledBarcode.Bounds().Dx(), scaledBarcode.Bounds().Dy()), scaledBarcode, image.Point{}, draw.Over)
+	textWidth := font.MeasureString(basicfont.Face7x13, code).Ceil()
+	drawer := font.Drawer{
+		Dst:  label,
+		Src:  image.NewUniform(color.Black),
+		Face: basicfont.Face7x13,
+		Dot:  fixed.P((300 - textWidth) / 2, 118),
+	}
+	drawer.DrawString(code)
+
+	var output bytes.Buffer
+	if err := png.Encode(&output, label); err != nil {
+		return nil, fmt.Errorf("erreur encodage PNG: %w", err)
+	}
+	return output.Bytes(), nil
 }

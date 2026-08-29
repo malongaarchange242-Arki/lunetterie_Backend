@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/services"
@@ -35,4 +36,21 @@ func (h *BarcodeHandler) Next(c *gin.Context) {
 	}
 
 	shared.Success(c, http.StatusOK, gin.H{"barcode": barcode})
+}
+
+// Label retourne le PNG Code 128 d'un code de valise ou de carton.
+func (h *BarcodeHandler) Label(c *gin.Context) {
+	code := strings.TrimSpace(c.Param("code"))
+	code = strings.TrimPrefix(code, "/")
+	code = strings.TrimSuffix(code, ".png")
+	if code == "" {
+		shared.BadRequest(c, "code-barres requis")
+		return
+	}
+	image, err := h.barcodeService.GenerateBarcodeImage(code)
+	if err != nil {
+		shared.BadRequest(c, err.Error())
+		return
+	}
+	c.Data(http.StatusOK, "image/png", image)
 }
