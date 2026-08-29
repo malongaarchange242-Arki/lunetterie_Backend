@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ type photo struct {
 	ContentType string
 	Data        []byte
 }
+
 type session struct {
 	ID, PCToken, DeviceToken string
 	ExpiresAt                time.Time
@@ -46,7 +48,10 @@ type Manager struct {
 	sessions map[string]*session
 }
 
-func NewManager() *Manager { return &Manager{sessions: make(map[string]*session)} }
+func NewManager() *Manager {
+	return &Manager{sessions: make(map[string]*session)}
+}
+
 func token() (string, error) {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
@@ -54,6 +59,7 @@ func token() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
+
 func (m *Manager) Create() (*session, error) {
 	id, e := token()
 	if e != nil {
@@ -67,13 +73,23 @@ func (m *Manager) Create() (*session, error) {
 	if e != nil {
 		return nil, e
 	}
-	s := &session{ID: id, PCToken: pc, DeviceToken: device, ExpiresAt: time.Now().Add(sessionLifetime), clients: make(map[chan Event]struct{})}
+	s := &session{
+		ID:         id,
+		PCToken:    pc,
+		DeviceToken: device,
+		ExpiresAt:  time.Now().Add(sessionLifetime),
+		clients:    make(map[chan Event]struct{}),
+	}
 	m.mu.Lock()
 	m.sessions[id] = s
 	m.mu.Unlock()
 	return s, nil
 }
-func same(a, b string) bool { return a != "" && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
+
+func same(a, b string) bool {
+	return a != "" && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
 func (m *Manager) get(id, tok string, pc bool) (*session, bool) {
 	m.mu.RLock()
 	s := m.sessions[id]
@@ -83,6 +99,7 @@ func (m *Manager) get(id, tok string, pc bool) (*session, bool) {
 	}
 	return s, true
 }
+
 func (m *Manager) publish(s *session, e Event) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -93,6 +110,7 @@ func (m *Manager) publish(s *session, e Event) {
 		}
 	}
 }
+
 func (m *Manager) subscribe(s *session) chan Event {
 	ch := make(chan Event, 16)
 	m.mu.Lock()
@@ -100,15 +118,21 @@ func (m *Manager) subscribe(s *session) chan Event {
 	m.mu.Unlock()
 	return ch
 }
+
 func (m *Manager) unsubscribe(s *session, ch chan Event) {
 	m.mu.Lock()
 	delete(s.clients, ch)
 	m.mu.Unlock()
 }
 
-type Handler struct{ manager *Manager }
+type Handler struct {
+	manager *Manager
+}
 
-func NewHandler(m *Manager) *Handler { return &Handler{manager: m} }
+func NewHandler(m *Manager) *Handler {
+	return &Handler{manager: m}
+}
+
 func (h *Handler) sessionFrom(c *gin.Context, pc bool) (*session, bool) {
 	s, ok := h.manager.get(c.Param("id"), c.Query("token"), pc)
 	if !ok {
@@ -117,6 +141,7 @@ func (h *Handler) sessionFrom(c *gin.Context, pc bool) (*session, bool) {
 	}
 	return s, true
 }
+
 func publicBase(c *gin.Context) string {
 	scheme := "http"
 	if c.GetHeader("X-Forwarded-Proto") == "https" || c.Request.TLS != nil {
@@ -124,23 +149,61 @@ func publicBase(c *gin.Context) string {
 	}
 	return scheme + "://" + c.Request.Host
 }
+
+func frontendBase() string {
+	base := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/")
+	if base == "" {
+		return "http://localhost:3000"
+	}
+	return base
+}
+
 func (h *Handler) Create(c *gin.Context) {
 	s, err := h.manager.Create()
 	if err != nil {
 		shared.InternalError(c, "Création de session impossible")
 		return
 	}
-	base := publicBase(c)
-	deviceURL := fmt.Sprintf("%s/mobile-capture.html#session=%s&token=%s", base, s.ID, s.DeviceToken)
-	shared.Created(c, gin.H{"id": s.ID, "pair_code": s.ID[:8], "expires_at": s.ExpiresAt, "device_url": deviceURL, "qr_url": fmt.Sprintf("%s/api/v1/inventory/mobile-capture/sessions/%s/qr?token=%s", base, s.ID, s.PCToken), "events_url": fmt.Sprintf("%s/api/v1/inventory/mobile-capture/sessions/%s/events?token=%s", base, s.ID, s.PCToken)})
+	apiBase := publicBase(c)
+	webBase := frontendBase()
+
+	deviceURL := fmt.Sprintf(
+		"%s/mobile-capture.html#session=%s&token=%s",
+		webBase,
+		s.ID,
+		s.DeviceToken,
+	)
+
+	shared.Created(c, gin.H{
+		"id":         s.ID,
+		"pair_code":  s.ID[:8],
+		"expires_at": s.ExpiresAt,
+		"device_url": deviceURL,
+		"qr_url": fmt.Sprintf(
+			"%s/api/v1/inventory/mobile-capture/sessions/%s/qr?token=%s",
+			apiBase, s.ID, s.PCToken,
+		),
+		"events_url": fmt.Sprintf(
+			"%s/api/v1/inventory/mobile-capture/sessions/%s/events?token=%s",
+			apiBase, s.ID, s.PCToken,
+		),
+	})
 }
+
 func (h *Handler) QR(c *gin.Context) {
 	s, ok := h.sessionFrom(c, true)
 	if !ok {
 		return
 	}
 	c.Header("Cross-Origin-Resource-Policy", "cross-origin")
-	content := fmt.Sprintf("%s/mobile-capture.html#session=%s&token=%s", publicBase(c), s.ID, s.DeviceToken)
+
+	content := fmt.Sprintf(
+		"%s/mobile-capture.html#session=%s&token=%s",
+		frontendBase(),
+		s.ID,
+		s.DeviceToken,
+	)
+
 	code, err := qr.Encode(content, qr.M, qr.Auto)
 	if err != nil {
 		shared.InternalError(c, "QR impossible à générer")
@@ -158,6 +221,7 @@ func (h *Handler) QR(c *gin.Context) {
 	}
 	c.Data(http.StatusOK, "image/png", out.Bytes())
 }
+
 func (h *Handler) Events(c *gin.Context) {
 	s, ok := h.sessionFrom(c, true)
 	if !ok {
@@ -166,17 +230,18 @@ func (h *Handler) Events(c *gin.Context) {
 	server := websocket.Server{
 		Handshake: func(*websocket.Config, *http.Request) error { return nil },
 		Handler: func(ws *websocket.Conn) {
-		ch := h.manager.subscribe(s)
-		defer h.manager.unsubscribe(s, ch)
-		for event := range ch {
-			if err := websocket.JSON.Send(ws, event); err != nil {
-				return
+			ch := h.manager.subscribe(s)
+			defer h.manager.unsubscribe(s, ch)
+			for event := range ch {
+				if err := websocket.JSON.Send(ws, event); err != nil {
+					return
+				}
 			}
-		}
 		},
 	}
 	server.ServeHTTP(c.Writer, c.Request)
 }
+
 func (h *Handler) Connect(c *gin.Context) {
 	s, ok := h.sessionFrom(c, false)
 	if !ok {
@@ -185,6 +250,7 @@ func (h *Handler) Connect(c *gin.Context) {
 	h.manager.publish(s, Event{Type: "device.connected", Data: gin.H{"connected": true}, At: time.Now()})
 	shared.Success(c, http.StatusOK, gin.H{"connected": true, "expires_at": s.ExpiresAt})
 }
+
 func (h *Handler) Scan(c *gin.Context) {
 	s, ok := h.sessionFrom(c, false)
 	if !ok {
@@ -201,6 +267,7 @@ func (h *Handler) Scan(c *gin.Context) {
 	h.manager.publish(s, Event{Type: "barcode.scanned", Data: gin.H{"barcode": barcode}, At: time.Now()})
 	shared.Success(c, http.StatusOK, gin.H{"received": true, "barcode": barcode})
 }
+
 func (h *Handler) UploadPhoto(c *gin.Context) {
 	s, ok := h.sessionFrom(c, false)
 	if !ok {
@@ -230,6 +297,7 @@ func (h *Handler) UploadPhoto(c *gin.Context) {
 	h.manager.publish(s, Event{Type: "photo.received", Data: gin.H{"photo_url": url, "size": len(data)}, At: time.Now()})
 	shared.Success(c, http.StatusCreated, gin.H{"received": true})
 }
+
 func (h *Handler) Photo(c *gin.Context) {
 	s, ok := h.sessionFrom(c, true)
 	if !ok {
@@ -244,6 +312,7 @@ func (h *Handler) Photo(c *gin.Context) {
 	}
 	c.Data(http.StatusOK, p.ContentType, p.Data)
 }
+
 func (h *Handler) Close(c *gin.Context) {
 	s, ok := h.sessionFrom(c, true)
 	if !ok {
