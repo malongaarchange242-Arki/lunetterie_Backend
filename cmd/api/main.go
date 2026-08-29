@@ -296,7 +296,7 @@ func main() {
 
 		origin := c.GetHeader("Origin")
 		allowedOrigins := []string{
-			"https://lunetterie-frontend.onrender.com",
+			"https://lunetterie-front.onrender.com",
 			"https://www.lunetterie-frontend.onrender.com",
 			"https://api-lunetterie.universearch.com",
 			"https://www.api-lunetterie.universearch.com",
