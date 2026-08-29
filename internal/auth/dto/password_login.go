@@ -13,6 +13,7 @@ func IsValidPIN(pin string) bool {
 
 // PasswordLoginRequest : connexion par nom d'employé et code chiffré.
 type PasswordLoginRequest struct {
-	Name     string `json:"name" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Name      string `json:"name" binding:"required"`
+	Password  string `json:"password" binding:"required"`
+	RoleIndex *int   `json:"roleIndex"` // Index du rôle sélectionné dans le frontend (optionnel pour compatibilité)
 }

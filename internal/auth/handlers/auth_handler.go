@@ -29,6 +29,21 @@ func stringPtr(s string) *string {
 	return &s
 }
 
+func frontendRoleIndexToRoleID(index int) int64 {
+	switch index {
+	case 0:
+		return 3 // MAGASINIER (stock général)
+	case 1:
+		return 11 // PRE_ENREGISTREMENT
+	case 2:
+		return 6 // RESPONSABLE_STATION
+	case 3:
+		return 2 // ADMIN
+	default:
+		return 0
+	}
+}
+
 func normalizeEmail(rawEmail, firstName, lastName string) string {
 	email := strings.TrimSpace(rawEmail)
 	if email != "" {
@@ -230,7 +245,11 @@ func (h *AuthHandler) CheckUser(c *gin.Context) {
 		return
 	}
 
-	shared.Success(c, http.StatusOK, gin.H{"exists": true, "has_password": user.HasPassword})
+	shared.Success(c, http.StatusOK, gin.H{
+		"exists": true,
+		"has_password": user.HasPassword,
+		"email": user.Email,
+	})
 }
 
 func (h *AuthHandler) CreateUser(c *gin.Context) {
@@ -308,6 +327,20 @@ func (h *AuthHandler) LoginWithPassword(c *gin.Context) {
 	if !user.IsActive {
 		shared.Unauthorized(c, "Compte désactivé")
 		return
+	}
+
+	// Vérifier que le rôle sélectionné correspond au rôle de l'utilisateur
+	if req.RoleIndex != nil {
+		expectedRoleID := frontendRoleIndexToRoleID(*req.RoleIndex)
+		if expectedRoleID == 0 {
+			shared.Unauthorized(c, "Rôle invalide")
+			return
+		}
+
+		if user.RoleID != expectedRoleID {
+			shared.Unauthorized(c, "Identifiants incorrects")
+			return
+		}
 	}
 
 	token, err := h.authService.GenerateToken(user)

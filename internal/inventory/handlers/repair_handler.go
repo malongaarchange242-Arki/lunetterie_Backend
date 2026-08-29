@@ -95,21 +95,11 @@ func (h *RepairHandler) repairCandidate(candidate models.GlassAnalysisRepairCand
 	if err != nil {
 		return fmt.Errorf("photo monture: %w", err)
 	}
-	brancheBytes, brancheType, err := h.downloadImage(candidate.PhotoBrancheURL)
-	if err != nil {
-		return fmt.Errorf("photo branche: %w", err)
-	}
-
 	face, err := h.aiService.Analyze(montureBytes, imageFilename(candidate.PhotoMontureURL, "monture.jpg"), montureType)
 	if err != nil {
 		return fmt.Errorf("analyse monture: %w", err)
 	}
-	branche, err := h.aiService.AnalyzeBranche(brancheBytes, imageFilename(candidate.PhotoBrancheURL, "branche.jpg"), brancheType)
-	if err != nil {
-		return fmt.Errorf("analyse branche: %w", err)
-	}
-
-	analysis := buildRepairedAnalysis(candidate.ID, face, branche)
+	analysis := buildRepairedAnalysis(candidate.ID, face)
 	if err := h.analysisService.SaveAnalysis(analysis); err != nil {
 		return err
 	}
@@ -178,20 +168,11 @@ func (h *RepairHandler) downloadImage(url string) ([]byte, string, error) {
 	return body, contentType, nil
 }
 
-func buildRepairedAnalysis(glassID int64, face *dto.AnalysisResult, branche *dto.AnalysisResult) *models.GlassAnalysis {
+func buildRepairedAnalysis(glassID int64, face *dto.AnalysisResult) *models.GlassAnalysis {
 	result := dto.AnalysisResult{}
 	if face != nil {
 		result = *face
 	}
-	if branche != nil {
-		if strings.TrimSpace(branche.Reference) != "" {
-			result.Reference = branche.Reference
-		}
-		if strings.TrimSpace(branche.Brand) != "" {
-			result.Brand = branche.Brand
-		}
-	}
-
 	return &models.GlassAnalysis{
 		GlassID:             glassID,
 		ModelVersion:        "repair-lun-cng-1.0.0",

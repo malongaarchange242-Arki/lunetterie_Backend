@@ -16,11 +16,18 @@ type GlassHandler struct {
 	repo       *repositories.GlassRepository
 	display    *services.DisplayService
 	similarity *services.SimilarityService
+	mutations  glassMutationService
+}
+
+type glassMutationService interface {
+	AssignGlass(glassID, cartonID, userID int64) error
+	MoveGlass(glassID, cartonID, userID int64) error
+	ReserveGlass(glassID, reservationID, userID int64) error
 }
 
 // NewGlassHandler crée une nouvelle instance
-func NewGlassHandler(repo *repositories.GlassRepository, display *services.DisplayService, similarity *services.SimilarityService) *GlassHandler {
-	return &GlassHandler{repo: repo, display: display, similarity: similarity}
+func NewGlassHandler(repo *repositories.GlassRepository, display *services.DisplayService, similarity *services.SimilarityService, mutations glassMutationService) *GlassHandler {
+	return &GlassHandler{repo: repo, display: display, similarity: similarity, mutations: mutations}
 }
 
 // ListGlasses liste les montures filtrées par statut, pour une station donnée,

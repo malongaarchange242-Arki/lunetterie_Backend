@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	authRepositories "github.com/lunetterie/backend/internal/auth/repositories"
 	"github.com/lunetterie/backend/internal/inventory/dto"
 	"github.com/lunetterie/backend/internal/inventory/models"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
@@ -13,13 +16,81 @@ import (
 
 // TransferHandler gère les endpoints de transfert inter-station
 type TransferHandler struct {
-	service   *services.TransferService
-	glassRepo *repositories.GlassRepository
+	service    *services.TransferService
+	glassRepo  *repositories.GlassRepository
+	stationRepo *authRepositories.StationRepository
 }
 
 // NewTransferHandler crée une nouvelle instance
-func NewTransferHandler(service *services.TransferService, glassRepo *repositories.GlassRepository) *TransferHandler {
-	return &TransferHandler{service: service, glassRepo: glassRepo}
+func NewTransferHandler(service *services.TransferService, glassRepo *repositories.GlassRepository, stationRepo *authRepositories.StationRepository) *TransferHandler {
+	return &TransferHandler{service: service, glassRepo: glassRepo, stationRepo: stationRepo}
+}
+
+func mapTransferStatusForFront(status models.TransferStatus) string {
+	switch status {
+	case models.TransferStatusPreparation:
+		return "valide"
+	case models.TransferStatusInTransit:
+		return "valide"
+	case models.TransferStatusReceived:
+		return "valide"
+	case models.TransferStatusCancelled:
+		return "refuse"
+	default:
+		return "attente"
+	}
+}
+
+func toTransferFrontPayload(t *models.Transfer, items []models.TransferItem, glassRepo *repositories.GlassRepository, stationRepo *authRepositories.StationRepository) gin.H {
+	uids := make([]string, 0, len(items))
+	for _, item := range items {
+		if glass, err := glassRepo.GetByID(item.GlassID); err == nil && strings.TrimSpace(glass.Barcode) != "" {
+			uids = append(uids, glass.Barcode)
+		}
+	}
+
+	fromStation := "Stock général"
+	toStation := "Station"
+	if stationRepo != nil {
+		if s, err := stationRepo.GetByID(t.FromStationID); err == nil && strings.TrimSpace(s.Name) != "" {
+			fromStation = s.Name
+		}
+		if s, err := stationRepo.GetByID(t.ToStationID); err == nil && strings.TrimSpace(s.Name) != "" {
+			toStation = s.Name
+		}
+	}
+
+	motif := "Transfert interne"
+	if t.Notes != nil && strings.TrimSpace(*t.Notes) != "" {
+		motif = strings.TrimSpace(*t.Notes)
+	}
+	trimmedToStation := strings.TrimSpace(toStation)
+	codeBase := fmt.Sprintf("INT-%04d", t.ID)
+	if len(trimmedToStation) >= 3 {
+		codeBase = fmt.Sprintf("INT-%s-%04d", strings.ToUpper(trimmedToStation[:3]), t.ID)
+	}
+
+	return gin.H{
+		"id":         t.ID,
+		"ref":        fmt.Sprintf("INT-%d", t.ID),
+		"magasin":    toStation,
+		"source":     fromStation,
+		"origine":    "admin",
+		"date":       t.CreatedAt.Format("02/01/2006"),
+		"motif":      motif,
+		"besoin":     len(items),
+		"statut":     mapTransferStatusForFront(t.Status),
+		"uids":       uids,
+		"cartonCode": "",
+		"barcodeNum": codeBase,
+		"expedie":    t.Status == models.TransferStatusInTransit || t.Status == models.TransferStatusReceived,
+		"type":       "Tous",
+		"gamme":      "Toutes",
+		"genre":      "Tous",
+		"couleur":    "Toutes",
+		"urgence":    "Normale",
+		"sourceLabel": fromStation,
+	}
 }
 
 func toTransferResponse(t *models.Transfer, items []models.TransferItem, glassRepo *repositories.GlassRepository) dto.TransferResponse {
@@ -81,7 +152,12 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		return
 	}
 
-	shared.Created(c, toTransferResponse(transfer, nil, h.glassRepo))
+	payload := toTransferFrontPayload(transfer, nil, h.glassRepo, h.stationRepo)
+	shared.Created(c, gin.H{
+		"transfer": toTransferResponse(transfer, nil, h.glassRepo),
+		"demande":  payload,
+		"demandes": []gin.H{payload},
+	})
 }
 
 // AddItem ajoute une monture scannée à un transfert en préparation
@@ -203,9 +279,15 @@ func (h *TransferHandler) ListTransfers(c *gin.Context) {
 	}
 
 	resp := make([]dto.TransferResponse, 0, len(transfers))
+	compat := make([]gin.H, 0, len(transfers))
 	for _, t := range transfers {
 		items, _ := h.service.ListItems(t.ID)
 		resp = append(resp, toTransferResponse(&t, items, h.glassRepo))
+		compat = append(compat, toTransferFrontPayload(&t, items, h.glassRepo, h.stationRepo))
 	}
-	shared.Success(c, 200, resp)
+	shared.Success(c, 200, gin.H{
+		"transfers": resp,
+		"demandes":  compat,
+		"items":     compat,
+	})
 }

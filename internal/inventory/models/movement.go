@@ -18,7 +18,6 @@ type MovementListItem struct {
 	Size             *string   `db:"size" json:"size,omitempty"`
 	Price            *float64  `db:"price" json:"price,omitempty"`
 	PhotoMontureURL  *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
-	PhotoBrancheURL  *string   `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
 	FromStationID    *int64    `db:"from_station_id" json:"from_station_id,omitempty"`
 	FromStationName  *string   `db:"from_station_name" json:"from_station_name,omitempty"`
 	ToStationID      *int64    `db:"to_station_id" json:"to_station_id,omitempty"`

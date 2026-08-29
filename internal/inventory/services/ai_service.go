@@ -35,21 +35,12 @@ type rawAnalysisResponse struct {
 	FrameShape   string  `json:"frame_shape"`
 	Color        string  `json:"color"`
 	Material     string  `json:"material"`
-	HasBranches  bool    `json:"has_branches"`
 	MountType    string  `json:"mount_type"`
 	Gender       *string `json:"gender"`
 	ProductFiche struct {
 		Brand     *string `json:"brand"`
 		Reference *string `json:"reference"`
 	} `json:"product_fiche"`
-}
-
-// rawBrancheOCRResponse reflète le schéma renvoyé par POST /glasses/analyze-branche
-// (app/ai/claude_vision.py, ocr_branche) : lecture du texte gravé sur la branche.
-type rawBrancheOCRResponse struct {
-	Reference  *string `json:"reference"`
-	Brand      *string `json:"brand"`
-	Confidence float64 `json:"confidence"`
 }
 
 var shapeTranslation = map[string]string{
@@ -233,7 +224,7 @@ type rawChatResponse struct {
 
 // Chat relaie tel quel (message + historique + contexte déjà construits par direction.js)
 // au chatbot de direction du service IA, qui construit le prompt et appelle Claude
-// (app/ai/chat.py). Contrairement à Analyze/AnalyzeBranche, pas de repli silencieux
+// (app/ai/chat.py). Contrairement à Analyze, pas de repli silencieux
 // possible ici : une erreur remonte telle quelle à l'appelant.
 func (s *AIService) Chat(payload []byte) (string, []ChatAction, error) {
 	req, err := http.NewRequest(http.MethodPost, s.baseURL+"/assistant/chat", bytes.NewReader(payload))
@@ -263,57 +254,3 @@ func (s *AIService) Chat(payload []byte) (string, []ChatAction, error) {
 	return raw.Reply, raw.Actions, nil
 }
 
-// AnalyzeBranche envoie la photo de la branche au service IA pour OCR de la référence et de
-// la marque (Claude vision) — utilisé à l'étape 2 de scan.html, séparément de la photo de face.
-func (s *AIService) AnalyzeBranche(imageBytes []byte, filename string, contentType string) (*dto.AnalysisResult, error) {
-	body := new(bytes.Buffer)
-	writer := multipart.NewWriter(body)
-
-	header := make(textproto.MIMEHeader)
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
-	header.Set("Content-Type", contentType)
-	part, err := writer.CreatePart(header)
-	if err != nil {
-		return nil, fmt.Errorf("erreur création form: %w", err)
-	}
-	if _, err := io.Copy(part, bytes.NewReader(imageBytes)); err != nil {
-		return nil, fmt.Errorf("erreur copie image: %w", err)
-	}
-	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("erreur fermeture writer: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, s.baseURL+"/glasses/analyze-branche", body)
-	if err != nil {
-		return nil, fmt.Errorf("erreur création requête IA: %w", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("service IA injoignable: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("erreur lecture réponse IA: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("erreur service IA (status %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	var raw rawBrancheOCRResponse
-	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return nil, fmt.Errorf("réponse IA invalide: %w", err)
-	}
-
-	result := &dto.AnalysisResult{}
-	if raw.Reference != nil {
-		result.Reference = *raw.Reference
-	}
-	if raw.Brand != nil {
-		result.Brand = *raw.Brand
-	}
-	return result, nil
-}

@@ -9,16 +9,19 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/lunetterie/backend/internal/inventory/dto"
 	"github.com/lunetterie/backend/internal/shared"
-	"github.com/lunetterie/backend/internal/workflows"
 )
+
+type receptionExecutor interface {
+	Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, userID int64) (*dto.ReceptionResponse, error)
+}
 
 // ReceptionHandler gère les endpoints de réception
 type ReceptionHandler struct {
-	workflow *workflows.ReceptionWorkflow
+	workflow receptionExecutor
 }
 
 // NewReceptionHandler crée une nouvelle instance
-func NewReceptionHandler(workflow *workflows.ReceptionWorkflow) *ReceptionHandler {
+func NewReceptionHandler(workflow receptionExecutor) *ReceptionHandler {
 	return &ReceptionHandler{workflow: workflow}
 }
 
@@ -51,31 +54,38 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 	}
 
 	// Récupérer la photo de la monture
-	file, header, err := c.Request.FormFile("image")
+	montureFile, montureHeader, err := c.Request.FormFile("image")
 	if err != nil {
-		shared.BadRequest(c, "Image requise")
+		shared.BadRequest(c, "Image de monture requise")
 		return
 	}
-	defer file.Close()
+	defer montureFile.Close()
 
-	// Vérifier le type MIME
-	contentType := header.Header.Get("Content-Type")
-	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
-		shared.BadRequest(c, "Format d'image non supporté (JPEG, PNG ou WebP requis)")
+	// Vérifier le type MIME de la monture
+	montureContentType := montureHeader.Header.Get("Content-Type")
+	if montureContentType != "image/jpeg" && montureContentType != "image/png" && montureContentType != "image/webp" {
+		shared.BadRequest(c, "Format d'image monture non supporté (JPEG, PNG ou WebP requis)")
 		return
 	}
 
-	// Récupérer la photo de la branche (optionnelle)
-	var brancheFile multipart.File
-	if bFile, _, err := c.Request.FormFile("branche_image"); err == nil {
-		brancheFile = bFile
-		defer brancheFile.Close()
+	// Récupérer la photo de la branche
+	brancheFile, brancheHeader, err := c.Request.FormFile("branch_image")
+	if err != nil {
+		shared.BadRequest(c, "Image de branche requise")
+		return
+	}
+	defer brancheFile.Close()
+
+	brancheContentType := brancheHeader.Header.Get("Content-Type")
+	if brancheContentType != "image/jpeg" && brancheContentType != "image/png" && brancheContentType != "image/webp" {
+		shared.BadRequest(c, "Format d'image branche non supporté (JPEG, PNG ou WebP requis)")
+		return
 	}
 
 	// Exécuter le workflow
 	result, err := h.workflow.Execute(
 		req,
-		file,
+		montureFile,
 		brancheFile,
 		userID,
 	)

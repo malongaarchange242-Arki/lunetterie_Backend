@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -26,21 +27,49 @@ type StationTemplate struct {
 	PositionsParBac  int    `json:"positions_par_bac"`
 }
 
-// GenerateLocations invoque la fonction SQL de génération d'emplacements
-func (s *StorageGeneratorService) GenerateLocations(stationID int64, template StationTemplate) (int, error) {
-	var total int
-	err := s.db.QueryRow(
-		"SELECT generate_station_locations($1, $2, $3, $4, $5)",
-		stationID,
-		template.NumRayons,
-		template.EtageresParRayon,
-		template.BacsParEtagere,
-		template.PositionsParBac,
-	).Scan(&total)
-	if err != nil {
-		return 0, fmt.Errorf("erreur génération emplacements: %w", err)
+func (s *StorageGeneratorService) CreateLocation(stationID int64, parentID *int64, locationType string, capacity *int) (*models.StorageLocation, error) {
+	var location models.StorageLocation
+	if locationType != "VALISE" && locationType != "CARTON" {
+		return nil, fmt.Errorf("type d'emplacement invalide pour le nouveau modèle: %s", locationType)
 	}
-	return total, nil
+	if capacity != nil && *capacity < 1 {
+		return nil, fmt.Errorf("la capacité doit être positive ou nulle pour un carton illimité")
+	}
+
+	if locationType == "VALISE" {
+		if parentID != nil {
+			return nil, fmt.Errorf("une VALISE ne peut pas avoir de parent")
+		}
+		capacity = nil
+	} else if locationType == "CARTON" {
+		if parentID == nil {
+			return nil, fmt.Errorf("un CARTON doit appartenir à une VALISE")
+		}
+		parentType := ""
+		if err := s.db.Get(&parentType, `SELECT type FROM storage_locations WHERE id = $1 AND station_id = $2`, *parentID, stationID); err != nil {
+			return nil, fmt.Errorf("parent introuvable dans la station")
+		}
+		if parentType != "VALISE" {
+			return nil, fmt.Errorf("un CARTON doit avoir une VALISE comme parent")
+		}
+	}
+
+	temporaryCode := fmt.Sprintf("TEMP-%d", time.Now().UnixNano())
+	if err := s.db.Get(&location, `
+		INSERT INTO storage_locations (station_id, parent_location_id, zone, code, name, type, capacity, status)
+		VALUES ($1, $2, 'STOCK', $3, $4, $5, $6, 'LIBRE')
+		RETURNING id, station_id, parent_location_id, zone, code, name, type, capacity, status, created_at`,
+		stationID, parentID, temporaryCode, temporaryCode, locationType, capacity); err != nil {
+		return nil, fmt.Errorf("impossible de créer l'emplacement: %w", err)
+	}
+	prefix := map[string]string{"VALISE": "VAL", "CARTON": "CAR"}[locationType]
+	location.Code = fmt.Sprintf("%s-CNG-%d", prefix, location.ID)
+	location.Name = fmt.Sprintf("%s %d", locationType, location.ID)
+	if _, err := s.db.Exec(`UPDATE storage_locations SET code = $1, name = $2, barcode = $3 WHERE id = $4`, location.Code, location.Name, location.Code, location.ID); err != nil {
+		return nil, fmt.Errorf("impossible de finaliser l'emplacement: %w", err)
+	}
+	location.Barcode = &location.Code
+	return &location, nil
 }
 
 // GetLocationPath récupère le chemin lisible et le code d'un emplacement
@@ -81,11 +110,14 @@ func (s *StorageGeneratorService) PeekFreeLocation(stationID int64, zone models.
 	err := s.db.Get(&location, `
 		SELECT id, station_id, code, type, zone, status
 		FROM storage_locations
-		WHERE station_id = $1 AND zone = $2 AND type = 'POSITION' AND status = 'LIBRE'
+		WHERE station_id = $1
+		  AND zone = $2
+		  AND type = CASE WHEN $2 = 'STOCK' THEN 'CARTON' ELSE 'PRESENTOIR' END
+		  AND status = 'LIBRE'
 		ORDER BY code
 		LIMIT 1`, lookupStationID, zone)
 	if err != nil {
-		return 0, "", "", fmt.Errorf("aucun emplacement libre: aucune position disponible")
+		return 0, "", "", fmt.Errorf("aucun emplacement libre disponible")
 	}
 
 	path, code, err := s.GetLocationPath(location.ID)

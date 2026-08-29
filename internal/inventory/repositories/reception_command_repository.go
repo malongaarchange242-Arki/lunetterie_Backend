@@ -97,6 +97,11 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 			rc.activated_at,
 			rc.created_at,
 			rc.updated_at,
+			CASE
+				WHEN rc.status = 'completed' THEN 'completed'
+				WHEN EXISTS (SELECT 1 FROM pre_registration_cases prc WHERE prc.reception_command_id = rc.id) THEN 'in_progress'
+				ELSE 'not_started'
+			END AS pre_registration_status,
 
 			COALESCE(so.gender, '') AS order_gender,
 			COALESCE(so.gamme, '') AS order_gamme
@@ -221,6 +226,11 @@ func (r *ReceptionCommandRepository) GetByCode(code string) (*models.ReceptionCo
 				rc.activated_at,
 				rc.created_at,
 				rc.updated_at,
+				CASE
+					WHEN rc.status = 'completed' THEN 'completed'
+					WHEN EXISTS (SELECT 1 FROM pre_registration_cases prc WHERE prc.reception_command_id = rc.id) THEN 'in_progress'
+					ELSE 'not_started'
+				END AS pre_registration_status,
 
 				COALESCE(so.gender, '') AS order_gender,
 				COALESCE(so.gamme, '') AS order_gamme
@@ -330,55 +340,19 @@ func (r *ReceptionCommandRepository) Increment(code string) (*models.ReceptionCo
 				),
 
 				status = CASE
-					WHEN rc.registered_count + 1 >= rc.target_count
-						THEN 'completed'
-					ELSE rc.status
+					WHEN rc.registered_count + 1 >= rc.target_count THEN 'completed'
+					ELSE 'active'
 				END,
-
 				updated_at = NOW()
-
 			WHERE rc.code = $1
-			  AND rc.status = 'active'
-			  AND rc.registered_count < rc.target_count
-
-			RETURNING
-				rc.id,
-				rc.code,
-				rc.target_count,
-				rc.registered_count,
-				rc.status,
-				rc.supplier_order_id,
-				rc.created_by,
-				rc.activated_at,
-				rc.created_at,
-				rc.updated_at,
-
-				COALESCE(
-					(
-						SELECT so.gender
-						FROM supplier_orders so
-						WHERE so.id = rc.supplier_order_id
-					),
-					''
-				) AS order_gender,
-
-				COALESCE(
-					(
-						SELECT so.gamme
-						FROM supplier_orders so
-						WHERE so.id = rc.supplier_order_id
-					),
-					''
-				) AS order_gamme
+			RETURNING rc.id, rc.code, rc.target_count, rc.registered_count, rc.status, rc.supplier_order_id, rc.created_by, rc.activated_at, rc.created_at, rc.updated_at
 		`,
 		normalizedCode,
 	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf(
-				"session introuvable, fermée ou quota atteint",
-			)
+			return nil, nil
 		}
 
 		return nil, fmt.Errorf(
@@ -388,4 +362,71 @@ func (r *ReceptionCommandRepository) Increment(code string) (*models.ReceptionCo
 	}
 
 	return &command, nil
+}
+
+// ListArrivedCommands récupère toutes les commandes arrivées au stock général
+func (r *ReceptionCommandRepository) ListArrivedCommands() ([]models.ReceptionCommand, error) {
+	commands := make([]models.ReceptionCommand, 0)
+
+	err := r.db.Select(&commands, `
+		SELECT
+			rc.id,
+			rc.code,
+			rc.target_count,
+			rc.registered_count,
+			rc.status,
+			rc.supplier_order_id,
+			rc.created_by,
+			rc.activated_at,
+			rc.created_at,
+			rc.updated_at,
+			rc.shipment_status,
+			rc.dispatched_at,
+			rc.arrived_at,
+			CASE
+				WHEN rc.status = 'completed' THEN 'completed'
+				WHEN EXISTS (SELECT 1 FROM pre_registration_cases prc WHERE prc.reception_command_id = rc.id) THEN 'in_progress'
+				ELSE 'not_started'
+			END AS pre_registration_status,
+			COALESCE(so.gender, '') AS order_gender,
+			COALESCE(so.gamme, '') AS order_gamme
+		FROM reception_commands rc
+		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
+		WHERE rc.shipment_status = 'arrived'
+		ORDER BY rc.arrived_at DESC NULLS LAST
+	`)
+
+	if err != nil {
+		return nil, fmt.Errorf("erreur recuperation commandes arrivees: %w", err)
+	}
+
+	return commands, nil
+}
+
+// ListShipmentCommands retourne les commandes physiquement expédiées. Le poste de
+// scan doit aussi voir celles en transit : c'est le scan des valises qui les fait
+// précisément passer à l'état "arrived".
+func (r *ReceptionCommandRepository) ListShipmentCommands() ([]models.ReceptionCommand, error) {
+	commands := make([]models.ReceptionCommand, 0)
+	err := r.db.Select(&commands, `
+		SELECT
+			rc.id, rc.code, rc.target_count, rc.registered_count, rc.status,
+			rc.supplier_order_id, rc.created_by, rc.activated_at, rc.created_at, rc.updated_at,
+			rc.shipment_status, rc.dispatched_at, rc.arrived_at,
+			CASE
+				WHEN rc.status = 'completed' THEN 'completed'
+				WHEN EXISTS (SELECT 1 FROM pre_registration_cases prc WHERE prc.reception_command_id = rc.id) THEN 'in_progress'
+				ELSE 'not_started'
+			END AS pre_registration_status,
+			COALESCE(so.gender, '') AS order_gender,
+			COALESCE(so.gamme, '') AS order_gamme
+		FROM reception_commands rc
+		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
+		WHERE rc.shipment_status IN ('in_transit', 'arrived')
+		ORDER BY CASE rc.shipment_status WHEN 'in_transit' THEN 0 ELSE 1 END, rc.dispatched_at DESC NULLS LAST
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("erreur récupération commandes expédiées: %w", err)
+	}
+	return commands, nil
 }

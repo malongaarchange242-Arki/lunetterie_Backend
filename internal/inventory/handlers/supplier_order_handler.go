@@ -42,14 +42,32 @@ func (h *SupplierOrderHandler) Create(c *gin.Context) {
 		shared.BadRequest(c, "order_date invalide (format attendu AAAA-MM-JJ)")
 		return
 	}
-
-	order := &models.SupplierOrder{
-		Supplier:  supplier,
-		Quantity:  req.Quantity,
-		OrderDate: orderDate,
+	gender := strings.ToUpper(strings.TrimSpace(req.Gender))
+	if gender == "" {
+		gender = "UNISEXE"
 	}
-	note := strings.TrimSpace(req.Note)
-	if note != "" {
+	if gender != "HOMME" && gender != "FEMME" && gender != "ENFANT" && gender != "UNISEXE" {
+		shared.BadRequest(c, "gender invalide")
+		return
+	}
+	gamme := strings.ToLower(strings.TrimSpace(req.Gamme))
+	if gamme == "" {
+		gamme = "classique"
+	}
+	reference := strings.TrimSpace(req.Reference)
+	if reference == "" {
+		reference = fmt.Sprintf("BC-%d-%d", orderDate.Year(), time.Now().UnixNano())
+	}
+	barcodeNum := strings.TrimSpace(req.BarcodeNum)
+	if barcodeNum == "" {
+		barcodeNum = reference
+	}
+	destination := strings.TrimSpace(req.Destination)
+	if destination == "" {
+		destination = "Stock général"
+	}
+	order := &models.SupplierOrder{Reference: reference, Supplier: supplier, Provenance: strings.TrimSpace(req.Provenance), Destination: destination, Quantity: req.Quantity, Gender: gender, Gamme: gamme, OrderDate: orderDate, Transport: strings.TrimSpace(req.Transport), BarcodeNum: barcodeNum, Status: "attente"}
+	if note := strings.TrimSpace(req.Note); note != "" {
 		order.Note = &note
 	}
 	if userID, exists := c.Get("user_id"); exists {
@@ -57,12 +75,10 @@ func (h *SupplierOrderHandler) Create(c *gin.Context) {
 			order.CreatedBy = &id
 		}
 	}
-
 	if err := h.repo.Create(order); err != nil {
 		shared.InternalError(c, "Erreur lors de la création de la commande fournisseur")
 		return
 	}
-
 	shared.Created(c, gin.H{"order": order})
 }
 

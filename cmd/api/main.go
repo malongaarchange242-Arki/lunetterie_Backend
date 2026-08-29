@@ -17,13 +17,29 @@ import (
 	authMiddleware "github.com/lunetterie/backend/internal/auth/middleware"
 	authRepositories "github.com/lunetterie/backend/internal/auth/repositories"
 	authServices "github.com/lunetterie/backend/internal/auth/services"
+	identityServices "github.com/lunetterie/backend/internal/identity/services"
 	inventoryHandlers "github.com/lunetterie/backend/internal/inventory/handlers"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
 	"github.com/lunetterie/backend/internal/inventory/services"
+	"github.com/lunetterie/backend/internal/mobilecapture"
+	receptionServices "github.com/lunetterie/backend/internal/reception/services"
 	settingsStore "github.com/lunetterie/backend/internal/settings"
 	"github.com/lunetterie/backend/internal/workflows"
 )
 
+func findMobileCapturePage(frontendDir string) string {
+	candidates := []string{
+		filepath.Join(frontendDir, "mobile-capture.html"),
+		filepath.Join("../Frontend", "mobile-capture.html"),
+		filepath.Join("Frontend", "mobile-capture.html"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return candidates[0]
+}
 func findFrontendDir() string {
 	candidates := []string{
 		os.Getenv("FRONTEND_DIR"),
@@ -151,8 +167,11 @@ func main() {
 	movementSvc := services.NewMovementService(movementRepo)
 	barcodeSvc := services.NewBarcodeService(db)
 	analysisSvc := services.NewAnalysisService(analysisRepo)
+	transactionManager := repositories.NewTransactionManager(db)
+	glassMutationSvc := services.NewTransactionalGlassService(transactionManager, glassRepo, locationRepo, movementRepo, barcodeSvc)
 	storageGeneratorSvc := services.NewStorageGeneratorService(db)
 	authSvc := authServices.NewAuthService(os.Getenv("JWT_SECRET"))
+	identityAuthSvc := identityServices.NewAuthService(authSvc)
 	webauthnSvc := authServices.NewWebAuthnService(webauthnRepo, userRepo)
 	transferSvc := services.NewTransferService(transferRepo, glassRepo, movementRepo, allocationSvc, stationRepo)
 	deliveryRepo := repositories.NewDeliveryRepository(db)
@@ -170,6 +189,7 @@ func main() {
 
 	// Initialiser les dépôts nécessaires
 	receptionCommandRepo := repositories.NewReceptionCommandRepository(db)
+	preRegistrationRepo := repositories.NewPreRegistrationRepository(db)
 
 	// Initialiser les workflows
 	receptionWorkflow := workflows.NewReceptionWorkflow(
@@ -185,10 +205,15 @@ func main() {
 		shapeCorrectionRepo,
 		receptionCommandRepo,
 	)
+	receptionInventoryGateway := receptionServices.NewInventoryGateway(db)
+	receptionSvc := receptionServices.NewReceptionService(receptionWorkflow, receptionInventoryGateway)
 
 	// Initialiser les handlers
-	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionWorkflow)
+	receptionHandler := inventoryHandlers.NewReceptionHandler(receptionSvc)
+	mobileCaptureHandler := mobilecapture.NewHandler(mobilecapture.NewManager())
 	receptionCommandHandler := inventoryHandlers.NewReceptionCommandHandler(receptionCommandRepo)
+	preRegistrationHandler := inventoryHandlers.NewPreRegistrationHandler(preRegistrationRepo)
+	shipmentHandler := inventoryHandlers.NewShipmentHandler(preRegistrationRepo, receptionCommandRepo)
 	supplierOrderRepo := repositories.NewSupplierOrderRepository(db)
 	supplierOrderHandler := inventoryHandlers.NewSupplierOrderHandler(supplierOrderRepo)
 	expeditionHandler := inventoryHandlers.NewExpeditionHandler(supplierOrderRepo)
@@ -229,14 +254,14 @@ func main() {
 	countryHandler := inventoryHandlers.NewCountryHandler(countryRepo)
 	cityHandler := inventoryHandlers.NewCityHandler(cityRepo)
 	storageGeneratorHandler := inventoryHandlers.NewStorageGeneratorHandler(storageGeneratorSvc)
-	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo)
+	transferHandler := inventoryHandlers.NewTransferHandler(transferSvc, glassRepo, stationRepo)
 	// Delivery handler
 	deliveryHandler := inventoryHandlers.NewDeliveryHandler(deliverySvc, glassRepo, deliveryRepo)
 	saleHandler := inventoryHandlers.NewSaleHandler(saleSvc)
 	reserveHandler := inventoryHandlers.NewReserveHandler(reserveSvc, reserveRepo)
 	presentoirHandler := inventoryHandlers.NewPresentoirHandler(locationRepo, displaySvc)
 	movementHandler := inventoryHandlers.NewMovementHandler(movementRepo)
-	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc)
+	glassHandler := inventoryHandlers.NewGlassHandler(glassRepo, displaySvc, similaritySvc, glassMutationSvc)
 	analyzeHandler := inventoryHandlers.NewAnalyzeHandler(aiSvc)
 	repairHandler := inventoryHandlers.NewRepairHandler(glassRepo, analysisSvc, aiSvc)
 	chatHandler := inventoryHandlers.NewChatHandler(aiSvc)
@@ -317,6 +342,7 @@ func main() {
 	router.StaticFile("/scan.html", filepath.Join(frontendDir, "scan.html"))
 	router.StaticFile("/scan.css", filepath.Join(frontendDir, "scan.css"))
 	router.StaticFile("/scan.js", filepath.Join(frontendDir, "scan.js"))
+	router.StaticFile("/mobile-capture.html", findMobileCapturePage(frontendDir))
 	router.StaticFile("/direction.html", filepath.Join(frontendDir, "direction.html"))
 	router.StaticFile("/direction.css", filepath.Join(frontendDir, "direction.css"))
 	router.StaticFile("/direction.js", filepath.Join(frontendDir, "direction.js"))
@@ -411,7 +437,7 @@ func main() {
 			auth.POST("/register", authHandler.RegisterUser)
 			// Création de compte avec role_id/station_id choisis librement par l'appelant :
 			// réservée aux rôles admin.
-			auth.POST("/register-fingerprint", authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.RegisterFingerprintUser)
+			auth.POST("/register-fingerprint", authMiddleware.RequireAuth(identityAuthSvc), authMiddleware.RequireRoles(1, 2, 8, 12), authHandler.RegisterFingerprintUser)
 			// Rate limiting par IP (pas global : chaque IP a son propre compteur) sur les
 			// routes qui acceptent un secret devinable (mot de passe, jeton d'activation) —
 			// freine le brute-force sans jamais impacter les autres utilisateurs de l'API.
@@ -434,7 +460,7 @@ func main() {
 		}
 
 		inventory := v1.Group("/inventory")
-		inventory.Use(authMiddleware.RequireAuth(authSvc))
+		inventory.Use(authMiddleware.RequireAuth(identityAuthSvc))
 		{
 			inventory.GET("/countries", countryHandler.List)
 			inventory.GET("/cities", cityHandler.ListByCountry)
@@ -458,6 +484,7 @@ func main() {
 			{
 				sendLists.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), sendListHandler.Create)
 				sendLists.GET("", sendListHandler.List)
+				sendLists.GET("/validation", sendListHandler.ListValidations)
 				sendLists.GET("/:id/items", sendListHandler.GetItems)
 				sendLists.DELETE("/:id", authMiddleware.RequireRoles(1, 2, 8, 12), sendListHandler.Cancel)
 				sendLists.POST("/seen", sendListHandler.MarkSeen)
@@ -535,9 +562,20 @@ func main() {
 			// tout compte authentifié laisserait n'importe quel écran en brûler.
 			inventory.GET("/barcodes/next", authMiddleware.RequireRoles(1, 2, 3, 8, 12), barcodeHandler.Next)
 			inventory.POST("/reception", receptionHandler.HandleReception)
+			mobileCapture := inventory.Group("/mobile-capture")
+			{
+				mobileCapture.POST("/sessions", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), mobileCaptureHandler.Create)
+				mobileCapture.GET("/sessions/:id/qr", mobileCaptureHandler.QR)
+				mobileCapture.GET("/sessions/:id/events", mobileCaptureHandler.Events)
+				mobileCapture.POST("/sessions/:id/connect", mobileCaptureHandler.Connect)
+				mobileCapture.POST("/sessions/:id/scan", mobileCaptureHandler.Scan)
+				mobileCapture.POST("/sessions/:id/photo", mobileCaptureHandler.UploadPhoto)
+				mobileCapture.GET("/sessions/:id/photo", mobileCaptureHandler.Photo)
+				mobileCapture.DELETE("/sessions/:id", mobileCaptureHandler.Close)
+			}
 			// Créer une session de réception reste réservé à la direction/admin ; la lister,
-			// consulter un code précis et l'incrémenter sont ouverts au magasinier (rôle 3),
-			// car c'est lui qui réceptionne physiquement les montures.
+			// consulter un code précis et l'incrémenter sont ouverts aux rôles qui traitent
+			// physiquement les montures, dont PRE_ENREGISTREMENT (rôle 11).
 			//
 			// La lecture lui a été ouverte pour que le poste de scan puisse afficher les
 			// commandes en attente et reprendre une réception entamée depuis n'importe quel
@@ -546,11 +584,19 @@ func main() {
 			receptionCommands := inventory.Group("/reception-commands")
 			{
 				receptionCommands.POST("", authMiddleware.RequireRoles(1, 2, 8, 12), receptionCommandHandler.Create)
-				receptionCommands.GET("", authMiddleware.RequireRoles(1, 2, 3, 8, 12), receptionCommandHandler.List)
+				receptionCommands.GET("", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), receptionCommandHandler.List)
 				receptionCommands.DELETE("/:id", authMiddleware.RequireRoles(1, 2, 8, 12), receptionCommandHandler.Delete)
+				receptionCommands.GET("/shipment", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.ListShipmentCommands)
+				receptionCommands.GET("/shipment/arrived", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.GetArrivedCommands)
 				receptionCommands.GET("/:code", receptionCommandHandler.GetByCode)
 				receptionCommands.POST("/:code/activate", receptionCommandHandler.Activate)
 				receptionCommands.POST("/:code/increment", receptionCommandHandler.Increment)
+				receptionCommands.GET("/:code/cases", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.ListCases)
+				receptionCommands.POST("/:code/cases", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.CreateCase)
+				receptionCommands.POST("/cases/:caseId/boxes", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.CreateBox)
+				receptionCommands.POST("/:code/dispatch", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.Dispatch)
+				receptionCommands.POST("/cases/:caseId/scan", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.ScanCase)
+				receptionCommands.POST("/:code/arrived", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.MarkArrived)
 			}
 
 			supplierOrders := inventory.Group("/supplier-orders")
@@ -561,7 +607,6 @@ func main() {
 				supplierOrders.DELETE("/:id", supplierOrderHandler.Delete)
 			}
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
-			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
 			inventory.POST("/repairs/lun-cng-analysis", authMiddleware.RequireRoles(1, 2, 8, 12), repairHandler.RepairLunCngAnalysis)
 			inventory.GET("/glasses", glassHandler.ListGlasses)
 			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
@@ -570,7 +615,7 @@ func main() {
 			inventory.GET("/stock-summary", glassHandler.GetStockSummary)
 			storage := inventory.Group("/storage")
 			{
-				storage.POST("/generate", storageGeneratorHandler.GenerateLocations)
+				storage.POST("/locations", storageGeneratorHandler.CreateLocation)
 				storage.POST("/find-free", storageGeneratorHandler.FindFreeLocation)
 				storage.GET("/next-free", storageGeneratorHandler.PreviewFreeLocation)
 			}

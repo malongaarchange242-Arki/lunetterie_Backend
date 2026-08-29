@@ -76,14 +76,10 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	if err != nil {
 		return nil, fmt.Errorf("erreur lecture image monture: %w", err)
 	}
-	var brancheBytes []byte
-	if brancheImage != nil {
-		brancheBytes, err = io.ReadAll(brancheImage)
-		if err != nil {
-			return nil, fmt.Errorf("erreur lecture image branche: %w", err)
-		}
+	brancheBytes, err := io.ReadAll(brancheImage)
+	if err != nil {
+		return nil, fmt.Errorf("erreur lecture image branche: %w", err)
 	}
-
 	analysisResult := buildAnalysisResult(req)
 
 	// Étape: Générer un code-barres unique — sauf si le poste en a déjà réservé un.
@@ -114,18 +110,17 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 
 	// Étape: Envoyer les photos dans le bucket Supabase Storage
 	log.Println("📤 Upload des photos...")
-	var photoMontureURL, photoBrancheURL *string
+	var photoMontureURL *string
 	if url, err := w.storageService.Upload(barcode+"/monture.jpg", montureBytes, "image/jpeg"); err != nil {
 		log.Printf("⚠️  Erreur upload photo monture: %v", err)
 	} else {
 		photoMontureURL = &url
 	}
-	if len(brancheBytes) > 0 {
-		if url, err := w.storageService.Upload(barcode+"/branche.jpg", brancheBytes, "image/jpeg"); err != nil {
-			log.Printf("⚠️  Erreur upload photo branche: %v", err)
-		} else {
-			photoBrancheURL = &url
-		}
+	var photoBrancheURL *string
+	if url, err := w.storageService.Upload(barcode+"/branche.jpg", brancheBytes, "image/jpeg"); err != nil {
+		log.Printf("⚠️  Erreur upload photo branche: %v", err)
+	} else {
+		photoBrancheURL = &url
 	}
 
 	// Étape: Trouver un emplacement libre

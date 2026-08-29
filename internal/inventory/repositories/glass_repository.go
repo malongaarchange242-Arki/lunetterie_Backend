@@ -95,7 +95,7 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 	// reconnaît comme une absence.
 	query := `
 		SELECT g.id, g.barcode, g.station_id, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url, g.photo_branche_url,
+			g.photo_monture_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
 			reg.author AS registered_by
@@ -164,7 +164,7 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 	items := []models.GlassListItem{}
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url, g.photo_branche_url,
+			g.photo_monture_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code,
 			reg.author AS registered_by,
@@ -194,7 +194,7 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 	items := []models.GlassListItem{}
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url, g.photo_branche_url,
+			g.photo_monture_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g
@@ -220,7 +220,6 @@ func (r *GlassRepository) FindLunCngAnalysisRepairCandidates(limit int) ([]model
 			g.id,
 			g.barcode,
 			COALESCE(g.photo_monture_url, '') AS photo_monture_url,
-			COALESCE(g.photo_branche_url, '') AS photo_branche_url,
 			g.analysis_id,
 			ga.reference,
 			ga.brand,
@@ -231,7 +230,6 @@ func (r *GlassRepository) FindLunCngAnalysisRepairCandidates(limit int) ([]model
 		WHERE g.barcode LIKE 'LUN-CNG-%'
 		  AND g.reception_command_id IS NOT NULL
 		  AND COALESCE(g.photo_monture_url, '') <> ''
-		  AND COALESCE(g.photo_branche_url, '') <> ''
 		  AND COALESCE(ga.model_version, '') NOT IN ('repair-lun-cng-1.0.0', 'repair-img-err-1.0')
 		  AND (
 			NULLIF(TRIM(COALESCE(ga.reference, '')), '') IS NULL
@@ -253,7 +251,7 @@ func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassList
 	var item models.GlassListItem
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url, g.photo_branche_url,
+			g.photo_monture_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g
@@ -283,7 +281,7 @@ func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.Glas
 	items := []models.GlassListItem{}
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url, g.photo_branche_url,
+			g.photo_monture_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g

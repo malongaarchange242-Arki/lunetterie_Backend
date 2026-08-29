@@ -38,6 +38,15 @@ func (r *LocationRepository) UpdateStatus(locationID int64, status string) error
 	return err
 }
 
+// CountGlassesAtLocation compte les montures affectees a un emplacement.
+func (r *LocationRepository) CountGlassesAtLocation(locationID int64) (int, error) {
+	var count int
+	if err := r.db.Get(&count, `SELECT COUNT(*) FROM glasses WHERE location_id = $1`, locationID); err != nil {
+		return 0, fmt.Errorf("impossible de compter les montures de l'emplacement: %w", err)
+	}
+	return count, nil
+}
+
 // FindOrCreatePresentoirByCode retrouve un casier de présentoir par son code (« PR01-1 »),
 // et le crée s'il n'existe pas encore.
 //
@@ -61,7 +70,7 @@ func (r *LocationRepository) FindOrCreatePresentoirByCode(stationID int64, code 
 
 	insert := `
 		INSERT INTO storage_locations (station_id, zone, code, type, status)
-		VALUES ($1, 'PRESENTOIR', $2, 'POSITION', 'LIBRE')
+		VALUES ($1, 'PRESENTOIR', $2, 'PRESENTOIR', 'LIBRE')
 		ON CONFLICT (station_id, zone, code) DO UPDATE SET code = EXCLUDED.code
 		RETURNING id, station_id, code, type, zone, status`
 	if err := r.db.Get(&location, insert, stationID, code); err != nil {

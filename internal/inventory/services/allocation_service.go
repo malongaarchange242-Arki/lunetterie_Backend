@@ -1,8 +1,6 @@
 package services
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -21,7 +19,7 @@ func NewAllocationService(db *sqlx.DB) *AllocationService {
 }
 
 // FindFreeLocation trouve et réserve le premier emplacement libre d'une station,
-// dans l'ordre du code (POS-01, POS-02, ... POS-20 par bac).
+// dans l'ordre du code des cartons.
 //
 // Plus de découpage par tranche de prix : ça mélangeait l'aperçu affiché pendant
 // la saisie (sans prix connu, donc toujours "classique") et l'enregistrement réel
@@ -48,18 +46,13 @@ func (s *AllocationService) FindFreeLocation(
 	var selected models.StorageLocation
 
 	err := s.db.Get(&selected, `
-		SELECT
-			id,
-			station_id,
-			code,
-			type,
-			zone,
-			status
-		FROM storage_locations
-		WHERE station_id = $1
-		  AND zone = $2
-		  AND status = 'LIBRE'
-		  AND type = 'POSITION'
+		SELECT sl.id, sl.station_id, sl.code, sl.name, sl.barcode, sl.type, sl.zone, sl.capacity, sl.status
+		FROM storage_locations sl
+		WHERE sl.station_id = $1
+		  AND sl.zone = $2
+		  AND (sl.status = 'LIBRE' OR sl.type = 'CARTON')
+		  AND sl.type = CASE WHEN sl.zone = 'STOCK' THEN 'CARTON' ELSE 'PRESENTOIR' END
+		  AND (sl.capacity IS NULL OR (SELECT COUNT(*) FROM glasses g WHERE g.location_id = sl.id) < sl.capacity)
 		ORDER BY code
 		LIMIT 1
 	`, lookupStationID, zone)
@@ -71,16 +64,11 @@ func (s *AllocationService) FindFreeLocation(
 		)
 	}
 
-	_, err = s.db.Exec(
-		"UPDATE storage_locations SET status = 'OCCUPE' WHERE id = $1",
-		selected.ID,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf(
-			"impossible de réserver l'emplacement: %w",
-			err,
-		)
+	if zone != models.ZoneStock {
+		_, err = s.db.Exec("UPDATE storage_locations SET status = 'OCCUPE' WHERE id = $1", selected.ID)
+		if err != nil {
+			return nil, fmt.Errorf("impossible de réserver l'emplacement: %w", err)
+		}
 	}
 
 	return &selected, nil
@@ -167,18 +155,12 @@ func (s *AllocationService) FindFreeLocationNearCode(
 	}
 
 	query := `
-		SELECT
-			id,
-			station_id,
-			code,
-			type,
-			zone,
-			status
-		FROM storage_locations
-		WHERE station_id = $1
-		  AND zone = $2
-		  AND status = 'LIBRE'
-		  AND type = 'POSITION'
+		SELECT sl.id, sl.station_id, sl.code, sl.name, sl.barcode, sl.type, sl.zone, sl.capacity, sl.status
+		FROM storage_locations sl
+		WHERE sl.station_id = $1
+		  AND sl.zone = $2
+		  AND sl.type = 'CARTON'
+		  AND (sl.capacity IS NULL OR (SELECT COUNT(*) FROM glasses g WHERE g.location_id = sl.id) < sl.capacity)
 		  AND code LIKE $3
 		ORDER BY code
 		LIMIT 1
@@ -202,16 +184,11 @@ func (s *AllocationService) FindFreeLocationNearCode(
 		)
 	}
 
-	_, err = s.db.Exec(
-		"UPDATE storage_locations SET status = 'OCCUPE' WHERE id = $1",
-		location.ID,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf(
-			"impossible de réserver l'emplacement: %w",
-			err,
-		)
+	if zone != models.ZoneStock {
+		_, err = s.db.Exec("UPDATE storage_locations SET status = 'OCCUPE' WHERE id = $1", location.ID)
+		if err != nil {
+			return nil, fmt.Errorf("impossible de réserver l'emplacement: %w", err)
+		}
 	}
 
 	return &location, nil
@@ -269,141 +246,13 @@ func (s *AllocationService) findOrCreateLocation(
 	stationID int64,
 	zone models.ZoneType,
 ) (*models.StorageLocation, error) {
-
-	// ------------------------------------------------------------
-	// 1. Chercher d'abord un emplacement libre existant
-	// ------------------------------------------------------------
-
 	if location, err := s.FindFreeLocation(stationID, zone); err == nil {
 		return location, nil
 	}
-
-	// ------------------------------------------------------------
-	// 2. Déterminer la station physique utilisée
-	// ------------------------------------------------------------
-
-	lookupStationID := stationID
-
 	if zone == models.ZoneStock {
-		resolved, err := s.resolveStorageStationID(stationID)
-
-		if err != nil {
-			return nil, err
-		}
-
-		lookupStationID = resolved
+		return nil, fmt.Errorf("aucun carton disponible : créez d'abord un carton dans une valise")
 	}
-
-	// ------------------------------------------------------------
-	// 3. Créer un nouvel emplacement
-	// ------------------------------------------------------------
-
-	var lastErr error
-	for attempt := 1; attempt <= 100; attempt++ {
-		var count int
-		err := s.db.Get(
-			&count,
-			`
-			SELECT COUNT(*)
-			FROM storage_locations
-			WHERE station_id = $1
-			  AND zone = $2
-			  AND (
-					$2 <> 'STOCK'
-					OR (type = 'POSITION' AND code LIKE 'AUTO-STOCK-%')
-				  )
-			`,
-			lookupStationID,
-			zone,
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"impossible de compter les emplacements existants (zone %s): %w",
-				zone,
-				err,
-			)
-		}
-
-		code := genericLocationCode(count + attempt)
-
-		if zone == models.ZoneStock {
-			code = fmt.Sprintf("AUTO-STOCK-%06d", count+attempt)
-		}
-
-		if zone == models.ZonePresentoir {
-			code = presentoirLocationCode(count + attempt)
-		}
-
-		var location models.StorageLocation
-
-		query := `
-			INSERT INTO storage_locations (
-				station_id,
-				zone,
-				code,
-				type,
-				status
-			)
-			VALUES (
-				$1,
-				$2,
-				$3,
-				'POSITION',
-				'OCCUPE'
-			)
-			ON CONFLICT (station_id, zone, code)
-			DO NOTHING
-			RETURNING
-				id,
-				station_id,
-				code,
-				type,
-				zone,
-				status
-		`
-
-		// IMPORTANT :
-		// Pour STOCK, on doit utiliser lookupStationID et non stationID.
-		//
-		// Avant :
-		//     stationID
-		//
-		// Correction :
-		//     lookupStationID
-		//
-		// Le COUNT et l'INSERT doivent travailler sur la même station
-		// physique.
-		err = s.db.Get(
-			&location,
-			query,
-			lookupStationID,
-			zone,
-			code,
-		)
-
-		if err == nil {
-			return &location, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf(
-				"impossible d'insérer l'emplacement (zone %s): %w",
-				zone,
-				err,
-			)
-		}
-		lastErr = err
-	}
-
-	// ------------------------------------------------------------
-	// 5. Échec après plusieurs tentatives
-	// ------------------------------------------------------------
-
-	return nil, fmt.Errorf(
-		"impossible de créer un emplacement (zone %s) pour la station #%d après 100 tentatives: %w",
-		zone,
-		stationID,
-		lastErr,
-	)
+	return nil, fmt.Errorf("aucun emplacement disponible pour la zone %s", zone)
 }
 
 // FindOrCreatePresentoirLocation trouve un emplacement libre
@@ -427,11 +276,7 @@ func (s *AllocationService) FindOrCreatePresentoirLocation(
 func (s *AllocationService) FindOrCreateStockLocation(
 	stationID int64,
 ) (*models.StorageLocation, error) {
-
-	return s.findOrCreateLocation(
-		stationID,
-		models.ZoneStock,
-	)
+	return s.FindFreeLocation(stationID, models.ZoneStock)
 }
 
 // FreeLocation libère un emplacement.

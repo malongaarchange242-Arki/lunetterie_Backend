@@ -15,40 +15,23 @@ type StorageGeneratorHandler struct {
 	service *services.StorageGeneratorService
 }
 
-// NewStorageGeneratorHandler crée une nouvelle instance
-func NewStorageGeneratorHandler(service *services.StorageGeneratorService) *StorageGeneratorHandler {
-	return &StorageGeneratorHandler{service: service}
-}
-
-// GenerateLocations génère automatiquement une arborescence d'emplacements pour une station
-// POST /api/v1/inventory/storage/generate
-func (h *StorageGeneratorHandler) GenerateLocations(c *gin.Context) {
-	var req dto.GenerateLocationsRequest
+func (h *StorageGeneratorHandler) CreateLocation(c *gin.Context) {
+	var req dto.CreateStorageLocationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		shared.BadRequest(c, "Données invalides: "+err.Error())
 		return
 	}
-
-	if req.Template.NumRayons <= 0 || req.Template.EtageresParRayon <= 0 || req.Template.BacsParEtagere <= 0 || req.Template.PositionsParBac <= 0 {
-		shared.BadRequest(c, "Les valeurs du template doivent être supérieures à 0")
-		return
-	}
-
-	template := services.StationTemplate{
-		Name:             req.Template.Name,
-		NumRayons:        req.Template.NumRayons,
-		EtageresParRayon: req.Template.EtageresParRayon,
-		BacsParEtagere:   req.Template.BacsParEtagere,
-		PositionsParBac:  req.Template.PositionsParBac,
-	}
-
-	total, err := h.service.GenerateLocations(req.StationID, template)
+	location, err := h.service.CreateLocation(req.StationID, req.ParentLocationID, req.Type, req.Capacity)
 	if err != nil {
-		shared.InternalError(c, "Erreur lors de la génération des emplacements: "+err.Error())
+		shared.BadRequest(c, err.Error())
 		return
 	}
+	shared.Success(c, 201, location)
+}
 
-	shared.Success(c, 201, gin.H{"total": total})
+// NewStorageGeneratorHandler crée une nouvelle instance
+func NewStorageGeneratorHandler(service *services.StorageGeneratorService) *StorageGeneratorHandler {
+	return &StorageGeneratorHandler{service: service}
 }
 
 // FindFreeLocation retourne un emplacement libre et son chemin lisible

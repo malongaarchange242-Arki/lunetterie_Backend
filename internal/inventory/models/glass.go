@@ -43,7 +43,6 @@ type GlassListItem struct {
 	Material           *string   `db:"material" json:"material,omitempty"`
 	LocationCode       *string   `db:"location_code" json:"location_code,omitempty"`
 	PhotoMontureURL    *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
-	PhotoBrancheURL    *string   `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
 	ReceptionCommandID *int64    `db:"reception_command_id" json:"reception_command_id,omitempty"`
 	// Ville de la liste d'envoi qui réserve cette monture (statut RESERVEE_ENVOI), tant que
 	// cette liste n'est pas TRAITEE. Nul pour tout autre statut.
@@ -57,7 +56,6 @@ type GlassAnalysisRepairCandidate struct {
 	ID              int64   `db:"id" json:"id"`
 	Barcode         string  `db:"barcode" json:"barcode"`
 	PhotoMontureURL string  `db:"photo_monture_url" json:"photo_monture_url"`
-	PhotoBrancheURL string  `db:"photo_branche_url" json:"photo_branche_url"`
 	AnalysisID      *int64  `db:"analysis_id" json:"analysis_id,omitempty"`
 	Reference       *string `db:"reference" json:"reference,omitempty"`
 	Brand           *string `db:"brand" json:"brand,omitempty"`
@@ -108,7 +106,10 @@ type StorageLocation struct {
 	ParentLocationID *int64    `db:"parent_location_id" json:"parent_location_id,omitempty"`
 	Zone             ZoneType  `db:"zone" json:"zone"`
 	Code             string    `db:"code" json:"code"`
+	Name             string    `db:"name" json:"name"`
+	Barcode          *string   `db:"barcode" json:"barcode,omitempty"`
 	Type             string    `db:"type" json:"type"`
+	Capacity         *int      `db:"capacity" json:"capacity,omitempty"`
 	Status           string    `db:"status" json:"status"`
 	CreatedAt        time.Time `db:"created_at" json:"created_at"`
 }

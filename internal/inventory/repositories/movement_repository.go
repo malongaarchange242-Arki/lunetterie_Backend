@@ -103,7 +103,7 @@ func (r *MovementRepository) List(filters models.MovementFilters) ([]models.Move
 		SELECT
 			m.id, m.glass_id, g.barcode, ga.reference, ga.brand,
 			ga.gender, ga.shape, ga.color, ga.size, g.price,
-			g.photo_monture_url, g.photo_branche_url,
+			g.photo_monture_url,
 			m.from_station_id, fs.name AS from_station_name,
 			m.to_station_id, ts.name AS to_station_name,
 			fl.code AS from_location_code,

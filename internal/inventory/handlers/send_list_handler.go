@@ -144,6 +144,88 @@ func (h *SendListHandler) List(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"lists": lists})
 }
 
+func mapValidationStatus(status string) string {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "NOUVELLE", "VUE":
+		return "attente"
+	case "TRAITEE":
+		return "valide"
+	case "ANNULEE":
+		return "refuse"
+	default:
+		return "attente"
+	}
+}
+
+func toValidationPayload(list models.SendList, items []models.SendListItem) gin.H {
+	uids := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.Barcode != nil && strings.TrimSpace(*item.Barcode) != "" {
+			uids = append(uids, strings.TrimSpace(*item.Barcode))
+		}
+	}
+
+	date := list.CreatedAt.Format("2006-01-02")
+	if !list.CreatedAt.IsZero() {
+		date = list.CreatedAt.Format("02/01/2006")
+	}
+	return gin.H{
+		"id":          list.ID,
+		"ref":         list.SessionCode,
+		"magasin":     list.City,
+		"source":      func() string { if list.DestinationStationName != nil { return *list.DestinationStationName }; return "Stock général" }(),
+		"origine":     "auto",
+		"date":        date,
+		"motif":       fmt.Sprintf("Liste %s vers %s", list.SessionCode, list.City),
+		"besoin":      list.ItemCount,
+		"statut":      mapValidationStatus(list.Status),
+		"uids":        uids,
+		"cartonCode":  "",
+		"type":        "Tous",
+		"gamme":       "Toutes",
+		"genre":       "Tous",
+		"couleur":     "Toutes",
+		"urgence":     "Normale",
+		"sourceLabel": func() string { if list.DestinationStationName != nil { return *list.DestinationStationName }; return "Stock général" }(),
+	}
+}
+
+// ListValidations renvoie les listes dans le format attendu par la page de validation du front.
+// GET /api/v1/inventory/send-lists/validation
+func (h *SendListHandler) ListValidations(c *gin.Context) {
+	status := strings.TrimSpace(c.Query("status"))
+	if status != "" && status != "attente" && status != "valide" && status != "refuse" && status != "tous" {
+		shared.BadRequest(c, "status invalide")
+		return
+	}
+
+	backendStatus := ""
+	if status == "attente" {
+		backendStatus = "NOUVELLE"
+	} else if status == "valide" {
+		backendStatus = "TRAITEE"
+	} else if status == "refuse" {
+		backendStatus = "ANNULEE"
+	}
+
+	lists, err := h.repo.List(backendStatus)
+	if err != nil {
+		shared.InternalError(c, err.Error())
+		return
+	}
+
+	result := make([]gin.H, 0, len(lists))
+	for _, list := range lists {
+		items, err := h.repo.ListItems(list.ID, "")
+		if err != nil {
+			shared.InternalError(c, err.Error())
+			return
+		}
+		result = append(result, toValidationPayload(list, items))
+	}
+	shared.Success(c, http.StatusOK, gin.H{"demandes": result})
+}
+
 // GetItems renvoie le contenu d'une liste.
 // GET /api/v1/inventory/send-lists/:id/items
 func (h *SendListHandler) GetItems(c *gin.Context) {
