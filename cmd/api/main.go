@@ -110,6 +110,18 @@ func ensureAppSettingsTable(db *sqlx.DB) {
 	}
 }
 
+// serveHTML est un helper qui enveloppe la lecture d'un fichier HTML et le serveur avec le bon charset
+func serveHTML(filePath string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			c.String(http.StatusNotFound, "Fichier non trouvé")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	}
+}
+
 func main() {
 	// Charger les variables d'environnement
 	_ = godotenv.Load()
@@ -346,27 +358,27 @@ func main() {
 	frontendDir := findFrontendDir()
 	router.StaticFile("/logo.jpeg", filepath.Join(frontendDir, "logo.jpeg"))
 	router.StaticFile("/login.css", filepath.Join(frontendDir, "login.css"))
-	router.StaticFile("/login.html", filepath.Join(frontendDir, "index.html"))
+	router.GET("/login.html", serveHTML(filepath.Join(frontendDir, "index.html")))
 	router.StaticFile("/login.js", filepath.Join(frontendDir, "login.js"))
-	router.StaticFile("/scan.html", filepath.Join(frontendDir, "scan.html"))
+	router.GET("/scan.html", serveHTML(filepath.Join(frontendDir, "scan.html")))
 	router.StaticFile("/scan.css", filepath.Join(frontendDir, "scan.css"))
 	router.StaticFile("/scan.js", filepath.Join(frontendDir, "scan.js"))
-	router.StaticFile("/mobile-capture.html", findMobileCapturePage(frontendDir))
-	router.StaticFile("/direction.html", filepath.Join(frontendDir, "direction.html"))
+	router.GET("/mobile-capture.html", serveHTML(findMobileCapturePage(frontendDir)))
+	router.GET("/direction.html", serveHTML(filepath.Join(frontendDir, "direction.html")))
 	router.StaticFile("/direction.css", filepath.Join(frontendDir, "direction.css"))
 	router.StaticFile("/direction.js", filepath.Join(frontendDir, "direction.js"))
-	router.StaticFile("/reception.html", filepath.Join(frontendDir, "reception.html"))
+	router.GET("/reception.html", serveHTML(filepath.Join(frontendDir, "reception.html")))
 	router.StaticFile("/reception.js", filepath.Join(frontendDir, "reception.js"))
-	router.StaticFile("/historique.html", filepath.Join(frontendDir, "historique.html"))
+	router.GET("/historique.html", serveHTML(filepath.Join(frontendDir, "historique.html")))
 	router.StaticFile("/historique.css", filepath.Join(frontendDir, "historique.css"))
 	router.StaticFile("/historique.js", filepath.Join(frontendDir, "historique.js"))
 	// Additional React pages supported when using Frontend_React/dist.
-	router.StaticFile("/vendeuse.html", filepath.Join(frontendDir, "vendeuse.html"))
-	router.StaticFile("/magasin.html", filepath.Join(frontendDir, "magasin.html"))
-	router.StaticFile("/caisse.html", filepath.Join(frontendDir, "caisse.html"))
-	router.StaticFile("/responsable.html", filepath.Join(frontendDir, "responsable.html"))
-	router.StaticFile("/sav.html", filepath.Join(frontendDir, "sav.html"))
-	router.StaticFile("/labo.html", filepath.Join(frontendDir, "labo.html"))
+	router.GET("/vendeuse.html", serveHTML(filepath.Join(frontendDir, "vendeuse.html")))
+	router.GET("/magasin.html", serveHTML(filepath.Join(frontendDir, "magasin.html")))
+	router.GET("/caisse.html", serveHTML(filepath.Join(frontendDir, "caisse.html")))
+	router.GET("/responsable.html", serveHTML(filepath.Join(frontendDir, "responsable.html")))
+	router.GET("/sav.html", serveHTML(filepath.Join(frontendDir, "sav.html")))
+	router.GET("/labo.html", serveHTML(filepath.Join(frontendDir, "labo.html")))
 
 	// Servi via c.Data (pas c.File/StaticFile, qui passent par http.ServeFile) : net/http
 	// redirige spécialement toute URL se terminant par "/index.html" vers "./", ce qui
@@ -385,9 +397,7 @@ func main() {
 	adminGroup := router.Group("/")
 	adminGroup.Use(authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12))
 	{
-		adminGroup.GET("/admin.html", func(c *gin.Context) {
-			c.File(filepath.Join(frontendDir, "admin.html"))
-		})
+		adminGroup.GET("/admin.html", serveHTML(filepath.Join(frontendDir, "admin.html")))
 		adminGroup.GET("/admin.css", func(c *gin.Context) {
 			c.File(filepath.Join(frontendDir, "admin.css"))
 		})
@@ -406,7 +416,7 @@ func main() {
 	})
 
 	// Fichier de test HTML (page d'inscription biométrique)
-	router.StaticFile("/test", "./test.html")
+	router.GET("/test", serveHTML("./test.html"))
 
 	// Redirection racine vers la page de connexion
 	router.GET("/", func(c *gin.Context) {
