@@ -617,6 +617,7 @@ func main() {
 				receptionCommands.DELETE("/cases/:caseId", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.DeleteCase)
 				receptionCommands.POST("/cases/:caseId/boxes", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.CreateBox)
 				receptionCommands.GET("/cases/:caseId/boxes/:boxId", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.ScanBox)
+				receptionCommands.POST("/cases/:caseId/boxes/:boxId/open", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.OpenBox)
 				receptionCommands.DELETE("/cases/:caseId/boxes/:boxId", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.DeleteBox)
 				receptionCommands.POST("/:code/dispatch", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.Dispatch)
 				receptionCommands.POST("/cases/:caseId/scan", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), shipmentHandler.ScanCase)

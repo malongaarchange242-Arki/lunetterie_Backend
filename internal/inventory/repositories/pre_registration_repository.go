@@ -239,6 +239,35 @@ func (r *PreRegistrationRepository) ScanReceptionCase(caseID int64) error {
 	return nil
 }
 
+// MarkCaseOpened réplique le début du traitement du carton au stock général.
+// On l'utilise quand un carton est ouvert manuellement depuis l'écran de réception :
+// cela fait passer la commande dans le statut d'arrivée visible dans l'historique.
+func (r *PreRegistrationRepository) MarkCaseOpened(caseID int64) error {
+	var commandID int64
+	if err := r.db.Get(&commandID, `
+		SELECT reception_command_id
+		FROM pre_registration_cases
+		WHERE id = $1`, caseID); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("valise introuvable")
+		}
+		return fmt.Errorf("erreur récupération commande associée: %w", err)
+	}
+	if commandID == 0 {
+		return fmt.Errorf("commande associée introuvable")
+	}
+	now := time.Now()
+	_, err := r.db.Exec(`
+		UPDATE reception_commands
+		SET shipment_status = 'arrived', arrived_at = COALESCE(arrived_at, $1), updated_at = $1
+		WHERE id = $2`,
+		now, commandID)
+	if err != nil {
+		return fmt.Errorf("erreur marquer commande ouverte: %w", err)
+	}
+	return nil
+}
+
 // CheckAllCasesScanned vérifie si toutes les valises d'une commande sont scannées
 // Retourne (allScanned, commandCode, error)
 func (r *PreRegistrationRepository) CheckAllCasesScanned(caseID int64) (bool, string, error) {

@@ -111,6 +111,24 @@ func (h *PreRegistrationHandler) ScanBox(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"carton": box})
 }
 
+func (h *PreRegistrationHandler) OpenBox(c *gin.Context) {
+	caseID, err := strconv.ParseInt(c.Param("caseId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de valise invalide")
+		return
+	}
+	boxID, err := strconv.ParseInt(c.Param("boxId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de carton invalide")
+		return
+	}
+	if err := h.repo.MarkCaseOpened(caseID); err != nil {
+		shared.InternalError(c, "Impossible d'ouvrir le carton: "+err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"opened": true, "case_id": caseID, "box_id": boxID})
+}
+
 func (h *PreRegistrationHandler) DeleteCase(c *gin.Context) {
 	caseID, err := strconv.ParseInt(c.Param("caseId"), 10, 64)
 	if err != nil {
