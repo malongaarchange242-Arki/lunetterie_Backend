@@ -73,6 +73,11 @@ type AnalysisResult struct {
 	ProcessingMs float64 `json:"processing_time_ms"`
 }
 
+// BranchAnalysisResult représente les résultats d'extraction de référence depuis la branche
+type BranchAnalysisResult struct {
+	Reference string `json:"reference,omitempty"`
+}
+
 // MovementInfo représente les infos du mouvement créé
 type MovementInfo struct {
 	ID        int64  `json:"id"`

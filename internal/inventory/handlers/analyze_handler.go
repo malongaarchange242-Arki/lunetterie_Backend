@@ -21,8 +21,11 @@ func NewAnalyzeHandler(aiService *services.AIService) *AnalyzeHandler {
 }
 
 // HandleAnalyze analyse une photo de monture et renvoie les caractéristiques détectées
-// POST /api/v1/inventory/analyze
+// POST /api/v1/inventory/analyze?kind=monture|branche
 func (h *AnalyzeHandler) HandleAnalyze(c *gin.Context) {
+	// 0. Déterminer le kind (monture ou branche)
+	kind := c.DefaultQuery("kind", "monture")
+	
 	// 1. Récupération du fichier
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
@@ -56,18 +59,26 @@ func (h *AnalyzeHandler) HandleAnalyze(c *gin.Context) {
 	}
 
 	// 5. Log des infos
-	log.Printf("Analyse image - Taille: %d bytes, Type: %s, Nom: %s",
-		len(imageBytes), contentType, header.Filename)
+	log.Printf("Analyse image - Taille: %d bytes, Type: %s, Nom: %s, Kind: %s",
+		len(imageBytes), contentType, header.Filename, kind)
 
-	// 6. Appel du service AI avec gestion d'erreur détaillée
-	result, err := h.aiService.Analyze(imageBytes, header.Filename, contentType)
-	if err != nil {
+	// 6. Appel du service AI avec le kind approprié
+	var result interface{}
+	var analyzeErr error
+	
+	if kind == "branche" {
+		result, analyzeErr = h.aiService.AnalyzeBranch(imageBytes, header.Filename, contentType)
+	} else {
+		result, analyzeErr = h.aiService.Analyze(imageBytes, header.Filename, contentType)
+	}
+	
+	if analyzeErr != nil {
 		// Log complet de l'erreur
-		log.Printf("ERREUR AI Analyze: %v", err)
+		log.Printf("ERREUR AI Analyze: %v", analyzeErr)
 
 		// Message d'erreur plus spécifique
 		errMsg := "Erreur lors de l'analyse de l'image"
-		shared.InternalError(c, errMsg+": "+err.Error())
+		shared.InternalError(c, errMsg+": "+analyzeErr.Error())
 		return
 	}
 

@@ -197,6 +197,60 @@ func (s *AIService) Analyze(imageBytes []byte, filename string, contentType stri
 	return result, nil
 }
 
+// AnalyzeBranch extraits the reference from a branch photo using OCR
+func (s *AIService) AnalyzeBranch(imageBytes []byte, filename string, contentType string) (*dto.BranchAnalysisResult, error) {
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+	header.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		return nil, fmt.Errorf("erreur création form: %w", err)
+	}
+	if _, err := io.Copy(part, bytes.NewReader(imageBytes)); err != nil {
+		return nil, fmt.Errorf("erreur copie image: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("erreur fermeture writer: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, s.baseURL+"/glasses/analyze-branch", body)
+	if err != nil {
+		return nil, fmt.Errorf("erreur création requête IA: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("service IA injoignable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erreur lecture réponse IA: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("erreur service IA (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var raw struct {
+		Reference *string `json:"reference"`
+	}
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return nil, fmt.Errorf("réponse IA invalide: %w", err)
+	}
+
+	result := &dto.BranchAnalysisResult{}
+	if raw.Reference != nil && *raw.Reference != "" {
+		result.Reference = *raw.Reference
+	}
+
+	return result, nil
+}
+
 // ChatAction décrit une action UI que le frontend doit exécuter en plus d'afficher la
 // réponse texte — voir navigate_to_page et rechercher_monture côté app/ai/chat.py.
 //
