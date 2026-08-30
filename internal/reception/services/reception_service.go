@@ -33,12 +33,20 @@ func (a *inventoryGatewayAdapter) HasAvailableCarton(stationID int64) (bool, err
 	}
 	var exists bool
 	if err := a.db.Get(&exists, `
+		WITH stock_station AS (
+			SELECT id
+			FROM stations
+			WHERE city = (SELECT city FROM stations WHERE id = $1)
+			  AND name ILIKE 'Stock Général%'
+			ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, id
+			LIMIT 1
+		)
 		SELECT EXISTS (
 			SELECT 1
 			FROM storage_locations sl
-			WHERE sl.station_id = $1
+			WHERE sl.station_id = COALESCE((SELECT id FROM stock_station), $1)
+			  AND sl.zone = 'STOCK'
 			  AND sl.type = 'CARTON'
-			  AND sl.status = 'LIBRE'
 			  AND (sl.capacity IS NULL OR (
 				SELECT COUNT(*) FROM glasses g WHERE g.location_id = sl.id
 			  ) < sl.capacity)
@@ -54,11 +62,19 @@ func (a *inventoryGatewayAdapter) FindFreeCarton(stationID int64) (*inventoryMod
 	}
 	var location inventoryModels.StorageLocation
 	if err := a.db.Get(&location, `
+		WITH stock_station AS (
+			SELECT id
+			FROM stations
+			WHERE city = (SELECT city FROM stations WHERE id = $1)
+			  AND name ILIKE 'Stock Général%'
+			ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, id
+			LIMIT 1
+		)
 		SELECT sl.id, sl.station_id, sl.code, sl.name, sl.barcode, sl.type, sl.zone, sl.capacity, sl.status
 		FROM storage_locations sl
-		WHERE sl.station_id = $1
+		WHERE sl.station_id = COALESCE((SELECT id FROM stock_station), $1)
+		  AND sl.zone = 'STOCK'
 		  AND sl.type = 'CARTON'
-		  AND sl.status = 'LIBRE'
 		  AND (sl.capacity IS NULL OR (
 			SELECT COUNT(*) FROM glasses g WHERE g.location_id = sl.id
 		  ) < sl.capacity)
@@ -71,7 +87,7 @@ func (a *inventoryGatewayAdapter) FindFreeCarton(stationID int64) (*inventoryMod
 
 // ReceptionService adapte le workflow historique de réception au module Reception.
 type ReceptionService struct {
-	workflow *workflows.ReceptionWorkflow
+	workflow  *workflows.ReceptionWorkflow
 	inventory InventoryGateway
 }
 

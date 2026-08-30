@@ -15,6 +15,23 @@ type receptionExecutor interface {
 	Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, arriereImage multipart.File, userID int64) (*dto.ReceptionResponse, error)
 }
 
+func isReceptionClientError(err error) bool {
+	message := strings.ToLower(err.Error())
+	clientErrors := []string{
+		"aucun carton disponible",
+		"carton disponible",
+		"capacit",
+		"commande de r",
+		"introuvable",
+	}
+	for _, item := range clientErrors {
+		if strings.Contains(message, item) {
+			return true
+		}
+	}
+	return false
+}
+
 // ReceptionHandler gère les endpoints de réception
 type ReceptionHandler struct {
 	workflow receptionExecutor
@@ -104,7 +121,12 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 		userID,
 	)
 	if err != nil {
-		shared.InternalError(c, "Erreur lors de la réception: "+err.Error())
+		message := "Erreur lors de la réception: " + err.Error()
+		if isReceptionClientError(err) {
+			shared.BadRequest(c, message)
+			return
+		}
+		shared.InternalError(c, message)
 		return
 	}
 
