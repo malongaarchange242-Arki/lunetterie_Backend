@@ -45,6 +45,7 @@ type GlassListItem struct {
 	MountType          *string   `db:"mount_type" json:"mount_type,omitempty"`
 	Gamme              *string   `db:"gamme" json:"gamme,omitempty"`
 	LocationCode       *string   `db:"location_code" json:"location_code,omitempty"`
+	ValiseCode         *string   `db:"valise_code" json:"valise_code,omitempty"`
 	PhotoMontureURL    *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
 	ReceptionCommandID *int64    `db:"reception_command_id" json:"reception_command_id,omitempty"`
 	// Ville de la liste d'envoi qui réserve cette monture (statut RESERVEE_ENVOI), tant que
