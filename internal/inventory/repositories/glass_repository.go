@@ -100,7 +100,13 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 			sl.code AS location_code,
 			reg.author AS registered_by
 		FROM glasses g
-		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id` + registrationJoin + `
 		WHERE g.station_id = $1 AND g.status = ANY($2)
 		ORDER BY g.created_at DESC`
@@ -128,7 +134,13 @@ func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryIte
 			COUNT(*) AS qty_total,
 			(COUNT(*) <= $1) AS is_critical
 		FROM glasses g
-		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
 		WHERE g.status NOT IN ('VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE', 'RESERVEE', 'EN_TRANSIT', 'EN_LABORATOIRE', 'PRETE_A_LIVRER')
 		GROUP BY ga.reference, ga.brand
 		ORDER BY ga.reference NULLS LAST`
@@ -174,7 +186,13 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 			  WHERE sli2.barcode = g.barcode AND sl2.status NOT IN ('TRAITEE', 'ANNULEE')
 			  ORDER BY sli2.id DESC LIMIT 1) AS reserved_for_city
 		FROM glasses g
-		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id` + registrationJoin + `
 		WHERE g.status = ANY($1)`
@@ -198,7 +216,13 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g
-		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id
 		WHERE g.reception_command_id = $1
@@ -226,7 +250,13 @@ func (r *GlassRepository) FindLunCngAnalysisRepairCandidates(limit int) ([]model
 			ga.shape,
 			ga.gender
 		FROM glasses g
-		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
 		WHERE g.barcode LIKE 'LUN-CNG-%'
 		  AND g.reception_command_id IS NOT NULL
 		  AND COALESCE(g.photo_monture_url, '') <> ''
@@ -255,7 +285,13 @@ func (r *GlassRepository) FindDetailByBarcode(barcode string) (*models.GlassList
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g
-		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id
 		WHERE g.barcode = $1`
@@ -285,7 +321,13 @@ func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.Glas
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g
-		LEFT JOIN glass_analysis ga ON ga.id = g.analysis_id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id
 		WHERE g.status = ANY($1) AND g.id != $2
