@@ -143,7 +143,19 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	var location *models.StorageLocation
 	var allocErr error
 
-	if req.Gender != nil || req.Shape != nil || req.Price != nil {
+	if req.PreRegistrationBoxID != nil || (req.CartonCode != nil && strings.TrimSpace(*req.CartonCode) != "") {
+		location, allocErr = w.allocationService.FindOrCreatePreRegistrationCartonLocation(
+			req.StationID,
+			req.ReceptionCommandCode,
+			req.PreRegistrationBoxID,
+			req.CartonCode,
+		)
+		if allocErr != nil {
+			return nil, fmt.Errorf("erreur allocation: %w", allocErr)
+		}
+	}
+
+	if location == nil && (req.Gender != nil || req.Shape != nil || req.Price != nil) {
 		candidates, err := w.glassRepo.FindByStationAndStatuses(req.StationID, []string{string(models.StatusEnStockGeneral)})
 		if err == nil && len(candidates) > 0 {
 			reference := &models.GlassListItem{

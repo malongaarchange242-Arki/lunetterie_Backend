@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"mime/multipart"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lunetterie/backend/internal/inventory/dto"
@@ -99,7 +100,7 @@ func (s *ReceptionService) Execute(req dto.ReceptionRequest, montureImage multip
 	if s.workflow == nil {
 		return nil, fmt.Errorf("workflow de réception non initialisé")
 	}
-	if s.inventory != nil {
+	if s.inventory != nil && req.PreRegistrationBoxID == nil && (req.CartonCode == nil || strings.TrimSpace(*req.CartonCode) == "") {
 		available, err := s.inventory.HasAvailableCarton(req.StationID)
 		if err != nil {
 			return nil, err

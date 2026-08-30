@@ -122,6 +122,94 @@ func (s *AllocationService) resolveStorageStationID(
 	return storageStationID, nil
 }
 
+func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
+	stationID int64,
+	commandCode *string,
+	boxID *int64,
+	boxCode *string,
+) (*models.StorageLocation, error) {
+	if boxID == nil && (boxCode == nil || strings.TrimSpace(*boxCode) == "") {
+		return nil, fmt.Errorf("carton de pre-enregistrement requis")
+	}
+
+	lookupStationID, err := s.resolveStorageStationID(stationID)
+	if err != nil {
+		return nil, err
+	}
+
+	type preRegistrationCarton struct {
+		BoxID    int64  `db:"box_id"`
+		BoxCode  string `db:"box_code"`
+		Quantity int    `db:"quantity"`
+		CaseID   int64  `db:"case_id"`
+		CaseCode string `db:"case_code"`
+	}
+
+	var idArg any
+	if boxID != nil {
+		idArg = *boxID
+	}
+	codeArg := ""
+	if boxCode != nil {
+		codeArg = strings.TrimSpace(*boxCode)
+	}
+	commandArg := ""
+	if commandCode != nil {
+		commandArg = strings.TrimSpace(*commandCode)
+	}
+
+	var carton preRegistrationCarton
+	if err := s.db.Get(&carton, `
+		SELECT b.id AS box_id, b.code AS box_code, b.quantity,
+		       c.id AS case_id, c.code AS case_code
+		FROM pre_registration_boxes b
+		JOIN pre_registration_cases c ON c.id = b.case_id
+		JOIN reception_commands rc ON rc.id = c.reception_command_id
+		WHERE (($1::bigint IS NOT NULL AND b.id = $1)
+		   OR ($1::bigint IS NULL AND UPPER(TRIM(b.code)) = UPPER(TRIM($2::text))))
+		  AND (NULLIF(TRIM($3::text), '') IS NULL OR rc.code = TRIM($3::text))
+		LIMIT 1`, idArg, codeArg, commandArg); err != nil {
+		return nil, fmt.Errorf("carton de pre-enregistrement introuvable: %w", err)
+	}
+
+	var valise models.StorageLocation
+	if err := s.db.Get(&valise, `
+		INSERT INTO storage_locations (station_id, parent_location_id, zone, code, name, type, barcode, status)
+		VALUES ($1, NULL, 'STOCK', $2, $3, 'VALISE', $2, 'LIBRE')
+		ON CONFLICT (station_id, zone, code) DO UPDATE SET
+			name = EXCLUDED.name,
+			barcode = COALESCE(storage_locations.barcode, EXCLUDED.barcode)
+		RETURNING id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at`,
+		lookupStationID, carton.CaseCode, "Valise "+carton.CaseCode); err != nil {
+		return nil, fmt.Errorf("impossible de preparer la valise %s: %w", carton.CaseCode, err)
+	}
+
+	var location models.StorageLocation
+	if err := s.db.Get(&location, `
+		INSERT INTO storage_locations (station_id, parent_location_id, zone, code, name, type, barcode, capacity, status)
+		VALUES ($1, $2, 'STOCK', $3, $4, 'CARTON', $3, $5, 'LIBRE')
+		ON CONFLICT (station_id, zone, code) DO UPDATE SET
+			parent_location_id = EXCLUDED.parent_location_id,
+			name = EXCLUDED.name,
+			barcode = COALESCE(storage_locations.barcode, EXCLUDED.barcode),
+			capacity = EXCLUDED.capacity
+		RETURNING id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at`,
+		lookupStationID, valise.ID, carton.BoxCode, "Carton "+carton.BoxCode, carton.Quantity); err != nil {
+		return nil, fmt.Errorf("impossible de preparer le carton %s: %w", carton.BoxCode, err)
+	}
+
+	if location.Capacity != nil {
+		var count int
+		if err := s.db.Get(&count, `SELECT COUNT(*) FROM glasses WHERE location_id = $1`, location.ID); err != nil {
+			return nil, fmt.Errorf("impossible de verifier la capacite du carton %s: %w", carton.BoxCode, err)
+		}
+		if count >= *location.Capacity {
+			return nil, fmt.Errorf("capacite du carton %s atteinte", carton.BoxCode)
+		}
+	}
+
+	return &location, nil
+}
 func codePrefix(code string) string {
 	parts := strings.Split(code, "-")
 
