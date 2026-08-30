@@ -323,8 +323,15 @@ func main() {
 			"http://localhost:8443",
 		}
 		isAllowedOrigin := false
+		if origin != "" {
+			if strings.Contains(origin, ".onrender.com") || strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Vary", "Origin")
+				isAllowedOrigin = true
+			}
+		}
 		for _, allowed := range allowedOrigins {
-			if origin == allowed || strings.HasSuffix(origin, ".onrender.com") {
+			if origin == allowed {
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Vary", "Origin")
 				isAllowedOrigin = true
