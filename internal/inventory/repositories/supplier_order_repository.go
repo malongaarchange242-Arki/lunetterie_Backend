@@ -186,3 +186,29 @@ func (r *SupplierOrderRepository) Delete(id int64) error {
 	}
 	return nil
 }
+
+// GetLatestCodeWithPrefix retourne le dernier code généré pour un préfixe.
+func (r *SupplierOrderRepository) GetLatestCodeWithPrefix(prefix string) (string, error) {
+	var code string
+
+	err := r.db.Get(
+		&code,
+		`
+			SELECT reference
+			FROM supplier_orders
+			WHERE reference LIKE $1
+			ORDER BY reference DESC
+			LIMIT 1
+		`,
+		prefix+"%",
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("impossible de récupérer le dernier code: %w", err)
+	}
+
+	return code, nil
+}

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,30 @@ type SupplierOrderHandler struct {
 
 func NewSupplierOrderHandler(repo *repositories.SupplierOrderRepository) *SupplierOrderHandler {
 	return &SupplierOrderHandler{repo: repo}
+}
+
+// generateNextSequentialCode génère le prochain code séquentiel pour un bon de commande
+// Format: BC-YYYY-NNN où NNN est un numéro séquentiel (001, 002, etc.)
+func (h *SupplierOrderHandler) generateNextSequentialCode(year int) (string, error) {
+	prefix := fmt.Sprintf("BC-%d-", year)
+	latestCode, err := h.repo.GetLatestCodeWithPrefix(prefix)
+	if err != nil {
+		return "", err
+	}
+
+	nextNum := 1
+	if latestCode != "" {
+		// Extraire le numéro séquentiel du dernier code (ex: "BC-2026-042" -> 42)
+		re := regexp.MustCompile(`BC-\d+-(\d+)$`)
+		matches := re.FindStringSubmatch(latestCode)
+		if len(matches) > 1 {
+			if num, err := strconv.Atoi(matches[1]); err == nil {
+				nextNum = num + 1
+			}
+		}
+	}
+
+	return fmt.Sprintf("%s%03d", prefix, nextNum), nil
 }
 
 func (h *SupplierOrderHandler) Create(c *gin.Context) {
@@ -56,7 +81,13 @@ func (h *SupplierOrderHandler) Create(c *gin.Context) {
 	}
 	reference := strings.TrimSpace(req.Reference)
 	if reference == "" {
-		reference = fmt.Sprintf("BC-%d-%d", orderDate.Year(), time.Now().UnixNano())
+		// Générer un code séquentiel automatique
+		generatedCode, err := h.generateNextSequentialCode(orderDate.Year())
+		if err != nil {
+			shared.InternalError(c, "Erreur lors de la génération de la référence")
+			return
+		}
+		reference = generatedCode
 	}
 	barcodeNum := strings.TrimSpace(req.BarcodeNum)
 	if barcodeNum == "" {
