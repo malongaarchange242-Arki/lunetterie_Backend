@@ -153,7 +153,7 @@ func publicBase(c *gin.Context) string {
 func frontendBase() string {
 	base := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/")
 	if base == "" {
-		return "http://localhost:3000"
+		return "https://lunetterie-front.onrender.com"
 	}
 	return base
 }
