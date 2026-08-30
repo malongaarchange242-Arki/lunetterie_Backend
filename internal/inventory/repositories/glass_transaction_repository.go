@@ -12,7 +12,7 @@ func (r *GlassRepository) CreateTx(tx ports.Transaction, glass *models.Glass) er
 	if err != nil {
 		return err
 	}
-	rows, err := sqlTx.NamedQuery(`INSERT INTO glasses (barcode, serial_number, frame_model_id, station_id, location_id, supplier_id, delivery_id, analysis_id, status, is_reserved, reserved_for_order, price, photo_monture_url, reception_command_id, notes) VALUES (:barcode, :serial_number, :frame_model_id, :station_id, :location_id, :supplier_id, :delivery_id, :analysis_id, :status, :is_reserved, :reserved_for_order, :price, :photo_monture_url, :reception_command_id, :notes) RETURNING id, created_at, updated_at`, glass)
+	rows, err := sqlTx.NamedQuery(`INSERT INTO glasses (barcode, serial_number, frame_model_id, station_id, location_id, supplier_id, delivery_id, analysis_id, status, is_reserved, reserved_for_order, price, photo_monture_url, photo_branche_url, photo_arriere_url, reception_command_id, notes) VALUES (:barcode, :serial_number, :frame_model_id, :station_id, :location_id, :supplier_id, :delivery_id, :analysis_id, :status, :is_reserved, :reserved_for_order, :price, :photo_monture_url, :photo_branche_url, :photo_arriere_url, :reception_command_id, :notes) RETURNING id, created_at, updated_at`, glass)
 	if err != nil {
 		return fmt.Errorf("erreur création glass: %w", err)
 	}

@@ -12,7 +12,7 @@ import (
 )
 
 type receptionExecutor interface {
-	Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, userID int64) (*dto.ReceptionResponse, error)
+	Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, arriereImage multipart.File, userID int64) (*dto.ReceptionResponse, error)
 }
 
 // ReceptionHandler gère les endpoints de réception
@@ -82,11 +82,25 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 		return
 	}
 
+	var arriereFile multipart.File
+	var arriereHeader *multipart.FileHeader
+	if formFile, header, err := c.Request.FormFile("rear_image"); err == nil {
+		arriereFile = formFile
+		arriereHeader = header
+		defer arriereFile.Close()
+		arriereContentType := arriereHeader.Header.Get("Content-Type")
+		if arriereContentType != "image/jpeg" && arriereContentType != "image/png" && arriereContentType != "image/webp" {
+			shared.BadRequest(c, "Format d'image arrière non supporté (JPEG, PNG ou WebP requis)")
+			return
+		}
+	}
+
 	// Exécuter le workflow
 	result, err := h.workflow.Execute(
 		req,
 		montureFile,
 		brancheFile,
+		arriereFile,
 		userID,
 	)
 	if err != nil {

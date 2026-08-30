@@ -69,7 +69,7 @@ func NewReceptionWorkflow(
 // Execute exécute le workflow complet de réception. Les caractéristiques (forme, couleur,
 // matière, ...) proviennent de l'écran de vérification du scan : l'analyse IA a déjà tourné
 // via POST /inventory/analyze et l'utilisateur les a validées/corrigées avant d'arriver ici.
-func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, userID int64) (*dto.ReceptionResponse, error) {
+func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, arriereImage multipart.File, userID int64) (*dto.ReceptionResponse, error) {
 	log.Printf("🚀 Démarrage workflow réception - User: %d, Station: %d", userID, req.StationID)
 
 	montureBytes, err := io.ReadAll(montureImage)
@@ -79,6 +79,13 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	brancheBytes, err := io.ReadAll(brancheImage)
 	if err != nil {
 		return nil, fmt.Errorf("erreur lecture image branche: %w", err)
+	}
+	var arriereBytes []byte
+	if arriereImage != nil {
+		arriereBytes, err = io.ReadAll(arriereImage)
+		if err != nil {
+			return nil, fmt.Errorf("erreur lecture image arrière: %w", err)
+		}
 	}
 	analysisResult := buildAnalysisResult(req)
 
@@ -121,6 +128,14 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 		log.Printf("⚠️  Erreur upload photo branche: %v", err)
 	} else {
 		photoBrancheURL = &url
+	}
+	var photoArriereURL *string
+	if len(arriereBytes) > 0 {
+		if url, err := w.storageService.Upload(barcode+"/arriere.jpg", arriereBytes, "image/jpeg"); err != nil {
+			log.Printf("⚠️  Erreur upload photo arrière: %v", err)
+		} else {
+			photoArriereURL = &url
+		}
 	}
 
 	// Étape: Trouver un emplacement libre
@@ -181,6 +196,7 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 		Price:              req.Price,
 		PhotoMontureURL:    photoMontureURL,
 		PhotoBrancheURL:    photoBrancheURL,
+		PhotoArriereURL:    photoArriereURL,
 		ReceptionCommandID: receptionCommandID,
 		Notes:              req.Notes,
 	}

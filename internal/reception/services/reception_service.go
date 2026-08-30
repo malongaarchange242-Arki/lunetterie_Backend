@@ -79,7 +79,7 @@ func NewReceptionService(workflow *workflows.ReceptionWorkflow, inventory Invent
 	return &ReceptionService{workflow: workflow, inventory: inventory}
 }
 
-func (s *ReceptionService) Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, userID int64) (*dto.ReceptionResponse, error) {
+func (s *ReceptionService) Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, arriereImage multipart.File, userID int64) (*dto.ReceptionResponse, error) {
 	if s.workflow == nil {
 		return nil, fmt.Errorf("workflow de réception non initialisé")
 	}
@@ -92,7 +92,7 @@ func (s *ReceptionService) Execute(req dto.ReceptionRequest, montureImage multip
 			return nil, fmt.Errorf("Veuillez créer/préparer un carton avant de réceptionner")
 		}
 	}
-	return s.workflow.Execute(req, montureImage, brancheImage, userID)
+	return s.workflow.Execute(req, montureImage, brancheImage, arriereImage, userID)
 }
 
 func (s *ReceptionService) CreateReceptionSession(stationID int64, userID int64) (string, error) {

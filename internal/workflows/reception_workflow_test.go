@@ -45,3 +45,11 @@ func TestResolveReceptionCommandIDFallsBackToCodeLookup(t *testing.T) {
 		t.Fatalf("expected resolved id %d, got %#v", lookupID, resolved)
 	}
 }
+
+func TestGlassSupportsRearPhotoURL(t *testing.T) {
+	url := "https://example.com/rear.jpg"
+	glass := models.Glass{PhotoArriereURL: &url}
+	if glass.PhotoArriereURL == nil || *glass.PhotoArriereURL != url {
+		t.Fatalf("expected rear photo URL %q, got %#v", url, glass.PhotoArriereURL)
+	}
+}

@@ -19,6 +19,7 @@ type Glass struct {
 	Price              *float64    `db:"price" json:"price,omitempty"`
 	PhotoMontureURL    *string     `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
 	PhotoBrancheURL    *string     `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
+	PhotoArriereURL    *string     `db:"photo_arriere_url" json:"photo_arriere_url,omitempty"`
 	ReceptionCommandID *int64      `db:"reception_command_id" json:"reception_command_id,omitempty"`
 	Notes              *string     `db:"notes" json:"notes,omitempty"`
 	CreatedAt          time.Time   `db:"created_at" json:"created_at"`

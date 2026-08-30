@@ -43,12 +43,12 @@ func (r *GlassRepository) Create(glass *models.Glass) error {
 			barcode, serial_number, frame_model_id, station_id,
 			location_id, supplier_id, delivery_id, analysis_id,
 			status, is_reserved, reserved_for_order, price,
-			photo_monture_url, photo_branche_url, reception_command_id, notes
+			photo_monture_url, photo_branche_url, photo_arriere_url, reception_command_id, notes
 		) VALUES (
 			:barcode, :serial_number, :frame_model_id, :station_id,
 			:location_id, :supplier_id, :delivery_id, :analysis_id,
 			:status, :is_reserved, :reserved_for_order, :price,
-			:photo_monture_url, :photo_branche_url, :reception_command_id, :notes
+			:photo_monture_url, :photo_branche_url, :photo_arriere_url, :reception_command_id, :notes
 		) RETURNING id, created_at, updated_at`
 
 	rows, err := r.db.NamedQuery(query, glass)

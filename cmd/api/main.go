@@ -479,8 +479,9 @@ func main() {
 		}
 
 		mobileCapture := v1.Group("/inventory/mobile-capture")
+		mobileCapture.Use(authMiddleware.RequireAuth(identityAuthSvc), authMiddleware.RequireRoles(3))
 		{
-			mobileCapture.POST("/sessions", authMiddleware.RequireAuth(identityAuthSvc), mobileCaptureHandler.Create)
+			mobileCapture.POST("/sessions", mobileCaptureHandler.Create)
 			mobileCapture.GET("/sessions/:id/qr", mobileCaptureHandler.QR)
 			mobileCapture.GET("/sessions/:id/events", mobileCaptureHandler.Events)
 			mobileCapture.POST("/sessions/:id/connect", mobileCaptureHandler.Connect)

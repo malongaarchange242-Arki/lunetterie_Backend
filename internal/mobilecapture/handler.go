@@ -148,7 +148,7 @@ func photoKind(c *gin.Context) (string, bool) {
 	if kind == "" {
 		kind = "monture"
 	}
-	if kind != "monture" && kind != "branche" {
+	if kind != "monture" && kind != "branche" && kind != "arriere" {
 		shared.BadRequest(c, "Type de photo invalide")
 		return "", false
 	}
