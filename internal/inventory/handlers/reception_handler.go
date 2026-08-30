@@ -26,12 +26,12 @@ func isReceptionClientError(err error) bool {
 	}
 	for _, item := range clientErrors {
 		if strings.Contains(message, item) {
-			return 
-true
+			return true // ✅ CORRIGÉ : return sur une ligne
 		}
 	}
 	return false
 }
+
 // ReceptionHandler gère les endpoints de réception
 type ReceptionHandler struct {
 	workflow receptionExecutor
@@ -112,19 +112,21 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 		}
 	}
 
-	// Exécuter le workflow
-	re		message := "Erreur lors de la réception: " + err.Error()
+	// Exécuter le workflow - ✅ CORRIGÉ : structure correcte
+	result, err := h.workflow.Execute(
+		req,
+		montureFile,
+		brancheFile,
+		arriereFile,
+		userID,
+	)
+	if err != nil {
+		message := "Erreur lors de la réception: " + err.Error()
 		if isReceptionClientError(err) {
 			shared.BadRequest(c, message)
 			return
 		}
 		shared.InternalError(c, message)
-,
-		arriereFile,
-		userID,
-	)
-	if err != nil {
-		shared.InternalError(c, "Erreur lors de la réception: "+err.Error())
 		return
 	}
 
