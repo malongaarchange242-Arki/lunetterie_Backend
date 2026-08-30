@@ -39,7 +39,7 @@ type photo struct {
 type session struct {
 	ID, PCToken, DeviceToken string
 	ExpiresAt                time.Time
-	photo                    *photo
+	photos                   map[string]*photo
 	clients                  map[chan Event]struct{}
 }
 
@@ -74,11 +74,12 @@ func (m *Manager) Create() (*session, error) {
 		return nil, e
 	}
 	s := &session{
-		ID:         id,
-		PCToken:    pc,
+		ID:          id,
+		PCToken:     pc,
 		DeviceToken: device,
-		ExpiresAt:  time.Now().Add(sessionLifetime),
-		clients:    make(map[chan Event]struct{}),
+		ExpiresAt:   time.Now().Add(sessionLifetime),
+		photos:      make(map[string]*photo),
+		clients:     make(map[chan Event]struct{}),
 	}
 	m.mu.Lock()
 	m.sessions[id] = s
@@ -136,10 +137,22 @@ func NewHandler(m *Manager) *Handler {
 func (h *Handler) sessionFrom(c *gin.Context, pc bool) (*session, bool) {
 	s, ok := h.manager.get(c.Param("id"), c.Query("token"), pc)
 	if !ok {
-		shared.Unauthorized(c, "Session mobile invalide ou expirée")
+		shared.Unauthorized(c, "Session mobile invalide ou expirÃ©e")
 		return nil, false
 	}
 	return s, true
+}
+
+func photoKind(c *gin.Context) (string, bool) {
+	kind := strings.ToLower(strings.TrimSpace(c.Query("kind")))
+	if kind == "" {
+		kind = "monture"
+	}
+	if kind != "monture" && kind != "branche" {
+		shared.BadRequest(c, "Type de photo invalide")
+		return "", false
+	}
+	return kind, true
 }
 
 func publicBase(c *gin.Context) string {
@@ -161,7 +174,7 @@ func frontendBase() string {
 func (h *Handler) Create(c *gin.Context) {
 	s, err := h.manager.Create()
 	if err != nil {
-		shared.InternalError(c, "Création de session impossible")
+		shared.InternalError(c, "CrÃ©ation de session impossible")
 		return
 	}
 	apiBase := publicBase(c)
@@ -206,17 +219,17 @@ func (h *Handler) QR(c *gin.Context) {
 
 	code, err := qr.Encode(content, qr.M, qr.Auto)
 	if err != nil {
-		shared.InternalError(c, "QR impossible à générer")
+		shared.InternalError(c, "QR impossible Ã  gÃ©nÃ©rer")
 		return
 	}
 	scaled, err := barcode.Scale(code, 360, 360)
 	if err != nil {
-		shared.InternalError(c, "QR impossible à dimensionner")
+		shared.InternalError(c, "QR impossible Ã  dimensionner")
 		return
 	}
 	var out bytes.Buffer
 	if err := png.Encode(&out, scaled); err != nil {
-		shared.InternalError(c, "QR impossible à encoder")
+		shared.InternalError(c, "QR impossible Ã  encoder")
 		return
 	}
 	c.Data(http.StatusOK, "image/png", out.Bytes())
@@ -273,6 +286,10 @@ func (h *Handler) UploadPhoto(c *gin.Context) {
 	if !ok {
 		return
 	}
+	kind, ok := photoKind(c)
+	if !ok {
+		return
+	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPhotoSize)
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
@@ -291,11 +308,14 @@ func (h *Handler) UploadPhoto(c *gin.Context) {
 		return
 	}
 	h.manager.mu.Lock()
-	s.photo = &photo{ContentType: typ, Data: data}
+	if s.photos == nil {
+		s.photos = make(map[string]*photo)
+	}
+	s.photos[kind] = &photo{ContentType: typ, Data: data}
 	h.manager.mu.Unlock()
-	url := fmt.Sprintf("/api/v1/inventory/mobile-capture/sessions/%s/photo?token=%s", s.ID, s.PCToken)
-	h.manager.publish(s, Event{Type: "photo.received", Data: gin.H{"photo_url": url, "size": len(data)}, At: time.Now()})
-	shared.Success(c, http.StatusCreated, gin.H{"received": true})
+	url := fmt.Sprintf("/api/v1/inventory/mobile-capture/sessions/%s/photo?token=%s&kind=%s", s.ID, s.PCToken, kind)
+	h.manager.publish(s, Event{Type: "photo.received", Data: gin.H{"kind": kind, "photo_url": url, "size": len(data)}, At: time.Now()})
+	shared.Success(c, http.StatusCreated, gin.H{"received": true, "kind": kind})
 }
 
 func (h *Handler) Photo(c *gin.Context) {
@@ -303,8 +323,12 @@ func (h *Handler) Photo(c *gin.Context) {
 	if !ok {
 		return
 	}
+	kind, ok := photoKind(c)
+	if !ok {
+		return
+	}
 	h.manager.mu.RLock()
-	p := s.photo
+	p := s.photos[kind]
 	h.manager.mu.RUnlock()
 	if p == nil {
 		shared.NotFound(c, "Aucune photo reçue")
@@ -312,7 +336,6 @@ func (h *Handler) Photo(c *gin.Context) {
 	}
 	c.Data(http.StatusOK, p.ContentType, p.Data)
 }
-
 func (h *Handler) Close(c *gin.Context) {
 	s, ok := h.sessionFrom(c, true)
 	if !ok {
