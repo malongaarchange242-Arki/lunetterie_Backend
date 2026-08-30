@@ -480,10 +480,16 @@ func main() {
 			}
 		}
 
-		mobileCapture := v1.Group("/inventory/mobile-capture")
-		mobileCapture.Use(authMiddleware.RequireAuth(identityAuthSvc), authMiddleware.RequireRoles(3))
+		// Mobile capture session creation requires JWT + role 3 (magasinier)
+		mobileCaptureAuth := v1.Group("/inventory/mobile-capture")
+		mobileCaptureAuth.Use(authMiddleware.RequireAuth(identityAuthSvc), authMiddleware.RequireRoles(3))
 		{
-			mobileCapture.POST("/sessions", mobileCaptureHandler.Create)
+			mobileCaptureAuth.POST("/sessions", mobileCaptureHandler.Create)
+		}
+
+		// Mobile capture session operations use session tokens (in query params), not JWT
+		mobileCapture := v1.Group("/inventory/mobile-capture")
+		{
 			mobileCapture.GET("/sessions/:id/qr", mobileCaptureHandler.QR)
 			mobileCapture.GET("/sessions/:id/events", mobileCaptureHandler.Events)
 			mobileCapture.POST("/sessions/:id/connect", mobileCaptureHandler.Connect)
