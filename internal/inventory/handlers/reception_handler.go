@@ -19,10 +19,15 @@ func isReceptionClientError(err error) bool {
 	message := strings.ToLower(err.Error())
 	clientErrors := []string{
 		"aucun carton disponible",
-		"carton disponible",
+		"aucun emplacement libre",
+		"aucun emplacement disponible",
+		"carton de pre-enregistrement requis",
+		"carton de pre-enregistrement introuvable",
+		"capacite du carton",
 		"capacit",
 		"commande de r",
 		"introuvable",
+		"erreur allocation",
 	}
 	for _, item := range clientErrors {
 		if strings.Contains(message, item) {

@@ -96,7 +96,8 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 	query := `
 		SELECT g.id, g.barcode, g.station_id, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url,
-			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material, ga.mount_type,
+			COALESCE(so.gamme, '') AS gamme,
 			sl.code AS location_code,
 			reg.author AS registered_by
 		FROM glasses g
@@ -107,6 +108,8 @@ func (r *GlassRepository) FindByStationAndStatuses(stationID int64, statuses []s
 			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
 			LIMIT 1
 		) ga ON TRUE
+		LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
+		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id` + registrationJoin + `
 		WHERE g.station_id = $1 AND g.status = ANY($2)
 		ORDER BY g.created_at DESC`
@@ -177,7 +180,8 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url,
-			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material, ga.mount_type,
+			COALESCE(so.gamme, '') AS gamme,
 			sl.code AS location_code,
 			reg.author AS registered_by,
 			(SELECT sl2.city
@@ -193,6 +197,8 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
 			LIMIT 1
 		) ga ON TRUE
+		LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
+		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id` + registrationJoin + `
 		WHERE g.status = ANY($1)`
@@ -213,7 +219,8 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url,
-			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
+			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material, ga.mount_type,
+			COALESCE(so.gamme, '') AS gamme,
 			sl.code AS location_code
 		FROM glasses g
 		LEFT JOIN LATERAL (
@@ -223,6 +230,8 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
 			LIMIT 1
 		) ga ON TRUE
+		LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
+		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id
 		WHERE g.reception_command_id = $1
