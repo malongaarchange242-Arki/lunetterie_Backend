@@ -36,6 +36,9 @@ func TestFrontendRoleIndexToRoleIDIncludesPreEnregistrement(t *testing.T) {
 		t.Fatalf("expected store manager role id 6, got %d", got)
 	}
 	if got := frontendRoleIndexToRoleID(3); got != 2 {
+		t.Fatalf("expected catalogue to resolve to admin role id 2, got %d", got)
+	}
+	if got := frontendRoleIndexToRoleID(4); got != 2 {
 		t.Fatalf("expected admin role id 2, got %d", got)
 	}
 	if got := frontendRoleIndexToRoleID(99); got != 0 {

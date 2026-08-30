@@ -395,7 +395,7 @@ func main() {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	})
 
-	// Page admin protégée
+	// Pages admin et catalogue : accès limité aux administrateurs / super-admin.
 	adminGroup := router.Group("/")
 	adminGroup.Use(authMiddleware.RequireAuth(authSvc), authMiddleware.RequireRoles(1, 2, 8, 12))
 	{
@@ -406,6 +406,8 @@ func main() {
 		adminGroup.GET("/admin.js", func(c *gin.Context) {
 			c.File(filepath.Join(frontendDir, "admin.js"))
 		})
+		adminGroup.GET("/Catalogue.html", serveHTML(filepath.Join(frontendDir, "Catalogue.html")))
+		adminGroup.GET("/catalogue.html", serveHTML(filepath.Join(frontendDir, "Catalogue.html")))
 	}
 
 	// Rediriger /admin vers la page admin.
@@ -415,6 +417,15 @@ func main() {
 			return
 		}
 		c.Redirect(http.StatusTemporaryRedirect, "/admin.html")
+	})
+
+	// Redirection catalogue : accès réservé aux administrateurs.
+	router.GET("/catalogue", func(c *gin.Context) {
+		if c.Query("debug") != "" {
+			c.Redirect(http.StatusTemporaryRedirect, "/index.html")
+			return
+		}
+		c.Redirect(http.StatusTemporaryRedirect, "/Catalogue.html")
 	})
 
 	// Fichier de test HTML (page d'inscription biométrique)

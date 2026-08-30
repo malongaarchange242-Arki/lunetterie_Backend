@@ -38,6 +38,8 @@ func frontendRoleIndexToRoleID(index int) int64 {
 	case 2:
 		return 6 // RESPONSABLE_STATION
 	case 3:
+		return 2 // ADMIN (page Catalogue réservée aux administrateurs)
+	case 4:
 		return 2 // ADMIN
 	default:
 		return 0
