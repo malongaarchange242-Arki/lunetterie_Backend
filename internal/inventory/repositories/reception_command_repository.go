@@ -123,6 +123,11 @@ func (r *ReceptionCommandRepository) List(status string) ([]models.ReceptionComm
 			WHERE rc.status = $1
 		`
 		args = append(args, strings.TrimSpace(status))
+	} else {
+		// Default: show only commands not yet shipped (pre-registration)
+		query += `
+			WHERE rc.shipment_status = 'not_shipped'
+		`
 	}
 
 	query += `
