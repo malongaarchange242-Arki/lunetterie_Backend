@@ -667,6 +667,8 @@ func main() {
 			inventory.GET("/glasses/:barcode/similar", glassHandler.GetSimilarGlasses)
 			inventory.POST("/glasses/:barcode/relocate", glassHandler.RelocateGlass)
 			inventory.GET("/stock-summary", glassHandler.GetStockSummary)
+			inventory.GET("/config/stock-thresholds", glassHandler.GetStockThresholdConfig)
+			inventory.GET("/stock-needs", glassHandler.GetStockNeeds)
 			storage := inventory.Group("/storage")
 			{
 				storage.POST("/locations", storageGeneratorHandler.CreateLocation)

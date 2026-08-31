@@ -56,6 +56,12 @@ type GlassListItem struct {
 	RegisteredBy *string `db:"registered_by" json:"registered_by,omitempty"`
 }
 
+type StockNeedItem struct {
+	Category string `json:"category"`
+	Name     string `json:"name"`
+	Quantity int    `json:"quantity"`
+}
+
 type GlassAnalysisRepairCandidate struct {
 	ID              int64   `db:"id" json:"id"`
 	Barcode         string  `db:"barcode" json:"barcode"`

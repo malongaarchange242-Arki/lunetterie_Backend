@@ -84,6 +84,22 @@ func (h *GlassHandler) GetStockSummary(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"items": summary})
 }
 
+// GetStockThresholdConfig renvoie la configuration locale de seuils utilisée pour
+// la santé du stock et le besoin de réassort.
+func (h *GlassHandler) GetStockThresholdConfig(c *gin.Context) {
+	shared.Success(c, http.StatusOK, services.DefaultStockThresholdConfig())
+}
+
+// GetStockNeeds renvoie les écarts de stock à commander pour les axes métier.
+func (h *GlassHandler) GetStockNeeds(c *gin.Context) {
+	needs, err := h.repo.GetStockNeeds()
+	if err != nil {
+		shared.InternalError(c, "Impossible de calculer les besoins de stock")
+		return
+	}
+	shared.Success(c, http.StatusOK, needs)
+}
+
 // GetGlassByBarcode recherche une monture par code-barres (toutes stations confondues).
 // Si station_id est fourni et que la monture est à ce poste, sa recherche vaut confirmation de
 // sa présence physique sur le présentoir : son statut et son emplacement sont mis à jour

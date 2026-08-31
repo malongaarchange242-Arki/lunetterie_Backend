@@ -155,6 +155,136 @@ func (r *GlassRepository) GetStockSummaryByReference() ([]models.StockSummaryIte
 	return items, nil
 }
 
+// GetStockNeeds retourne le besoin de réassort à partir du stock actif en magasin.
+func (r *GlassRepository) GetStockNeeds() ([]models.StockNeedItem, error) {
+	counts := map[string]map[string]int{
+		"genre": {},
+		"type":  {},
+		"gamme": {},
+	}
+
+	queries := []struct {
+		key    string
+		query  string
+		column string
+	}{
+		{
+			key: "genre",
+			query: `
+				SELECT COALESCE(ga.gender, '') AS value, COUNT(*) AS qty
+				FROM glasses g
+				LEFT JOIN LATERAL (
+					SELECT ga.*
+					FROM glass_analysis ga
+					WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+					ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+					LIMIT 1
+				) ga ON TRUE
+				WHERE g.status IN ('EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR')
+				GROUP BY COALESCE(ga.gender, '')`,
+			column: "value",
+		},
+		{
+			key: "type",
+			query: `
+				SELECT COALESCE(ga.mount_type, '') AS value, COUNT(*) AS qty
+				FROM glasses g
+				LEFT JOIN LATERAL (
+					SELECT ga.*
+					FROM glass_analysis ga
+					WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+					ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+					LIMIT 1
+				) ga ON TRUE
+				WHERE g.status IN ('EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR')
+				GROUP BY COALESCE(ga.mount_type, '')`,
+			column: "value",
+		},
+		{
+			key: "gamme",
+			query: `
+				SELECT COALESCE(so.gamme, '') AS value, COUNT(*) AS qty
+				FROM glasses g
+				LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
+				LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
+				WHERE g.status IN ('EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR')
+				GROUP BY COALESCE(so.gamme, '')`,
+			column: "value",
+		},
+	}
+
+	for _, item := range queries {
+		rows, err := r.db.Queryx(item.query)
+		if err != nil {
+			return nil, fmt.Errorf("impossible de calculer les besoins de stock: %w", err)
+		}
+		for rows.Next() {
+			var value string
+			var qty int
+			if err := rows.Scan(&value, &qty); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("impossible de lire les besoins de stock: %w", err)
+			}
+			if value == "" {
+				continue
+			}
+			counts[item.key][value] = qty
+		}
+		rows.Close()
+	}
+
+	config := map[string]interface{}{
+		"ventesMoisBoutique": 400,
+		"boutiques":          5,
+		"coefGeneral":        6.5,
+		"genre": map[string]int{
+			"Femme": 240,
+			"Homme": 210,
+			"Mixte": 90,
+			"Enfant": 60,
+		},
+		"type": map[string]int{
+			"Vue":      330,
+			"Solaire":  180,
+			"Lecture":  60,
+			"Sécurité": 30,
+		},
+		"gamme": map[string]int{
+			"Moyenne gamme": 270,
+			"Classique":     210,
+			"Luxe":          72,
+			"Enfant":        48,
+		},
+		"formesMini": 10,
+	}
+
+	items := make([]models.StockNeedItem, 0)
+	axes := []struct {
+		category string
+		key      string
+	}{
+		{category: "Genre", key: "genre"},
+		{category: "Type", key: "type"},
+		{category: "Gamme", key: "gamme"},
+	}
+	for _, axis := range axes {
+		thresholds, ok := config[axis.key].(map[string]int)
+		if !ok {
+			continue
+		}
+		for name, threshold := range thresholds {
+			if threshold <= 0 {
+				continue
+			}
+			qty := threshold - counts[axis.key][name]
+			if qty > 0 {
+				items = append(items, models.StockNeedItem{Category: axis.category, Name: name, Quantity: qty})
+			}
+		}
+	}
+	return items, nil
+}
+
 // registrationJoin rattache à chaque monture l'employé qui l'a enregistrée. L'enregistrement
 // crée un mouvement RECEPTION_FOURNISSEUR (voir reception_workflow.go), c'est donc lui qu'on
 // cherche en priorité. Le workflow n'échoue pas si la création du mouvement échoue : le tri
