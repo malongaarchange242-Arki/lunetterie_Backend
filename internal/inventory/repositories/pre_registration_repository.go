@@ -252,14 +252,27 @@ func NewPreRegistrationCase(code, couleur, hex, gamme, genre string, montures in
 
 // DispatchReceptionCommand marque une commande comme expédiée (en transit)
 func (r *PreRegistrationRepository) DispatchReceptionCommand(commandCode string) error {
+	normalizedCode := strings.TrimSpace(commandCode)
+	if normalizedCode == "" {
+		return fmt.Errorf("code de commande vide")
+	}
+
 	now := time.Now()
-	_, err := r.db.Exec(`
+	result, err := r.db.Exec(`
 		UPDATE reception_commands 
 		SET shipment_status = 'in_transit', dispatched_at = $1, updated_at = $1
 		WHERE code = $2`,
-		now, strings.TrimSpace(commandCode))
+		now, normalizedCode)
 	if err != nil {
 		return fmt.Errorf("erreur dispatcher commande: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("erreur verification expédition commande: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("commande introuvable ou déjà expédiée")
 	}
 	return nil
 }
