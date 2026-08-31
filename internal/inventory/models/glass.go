@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Glass représente une monture physique exemplaire
 type Glass struct {
@@ -46,6 +50,8 @@ type GlassListItem struct {
 	Gamme              *string   `db:"gamme" json:"gamme,omitempty"`
 	LocationCode       *string   `db:"location_code" json:"location_code,omitempty"`
 	ValiseCode         *string   `db:"valise_code" json:"valise_code,omitempty"`
+	CaseCode           *string   `db:"case_code" json:"case_code,omitempty"`
+	BoxCode            *string   `db:"box_code" json:"box_code,omitempty"`
 	PhotoMontureURL    *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
 	ReceptionCommandID *int64    `db:"reception_command_id" json:"reception_command_id,omitempty"`
 	// Ville de la liste d'envoi qui réserve cette monture (statut RESERVEE_ENVOI), tant que
@@ -54,6 +60,30 @@ type GlassListItem struct {
 	// La table glasses ne porte pas d'auteur : celui qui a enregistré la monture est
 	// l'utilisateur de son mouvement RECEPTION_FOURNISSEUR.
 	RegisteredBy *string `db:"registered_by" json:"registered_by,omitempty"`
+}
+
+func (g GlassListItem) ValiseCartonDisplay() string {
+	valise := g.CaseCode
+	if valise == nil || strings.TrimSpace(*valise) == "" {
+		valise = g.ValiseCode
+	}
+
+	box := g.BoxCode
+	if box == nil || strings.TrimSpace(*box) == "" {
+		box = g.LocationCode
+	}
+
+	valiseText := "—"
+	if valise != nil && strings.TrimSpace(*valise) != "" {
+		valiseText = strings.TrimSpace(*valise)
+	}
+
+	boxText := "—"
+	if box != nil && strings.TrimSpace(*box) != "" {
+		boxText = strings.TrimSpace(*box)
+	}
+
+	return fmt.Sprintf("%s / %s", valiseText, boxText)
 }
 
 type StockNeedItem struct {

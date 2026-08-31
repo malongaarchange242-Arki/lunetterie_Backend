@@ -330,8 +330,10 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 			) AS material,
 			COALESCE(ga.mount_type, pb.type_lunette, NULL) AS mount_type,
 			COALESCE(pb.gamme, pc.gamme, so.gamme, '') AS gamme,
+			pc.code AS case_code,
+			pb.code AS box_code,
 			sl.code AS location_code,
-			parent_sl.code AS valise_code,
+			COALESCE(pc.code, parent_sl.code) AS valise_code,
 			reg.author AS registered_by,
 			(SELECT sl2.city
 			   FROM send_list_items sli2
@@ -394,8 +396,10 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 			) AS material,
 			COALESCE(ga.mount_type, pb.type_lunette, NULL) AS mount_type,
 			COALESCE(pb.gamme, pc.gamme, so.gamme, '') AS gamme,
+			pc.code AS case_code,
+			pb.code AS box_code,
 			sl.code AS location_code,
-			parent_sl.code AS valise_code
+			COALESCE(pc.code, parent_sl.code) AS valise_code
 		FROM glasses g
 		LEFT JOIN LATERAL (
 			SELECT ga.*
