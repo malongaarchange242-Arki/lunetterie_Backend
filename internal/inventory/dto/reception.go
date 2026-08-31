@@ -30,7 +30,10 @@ type ReceptionRequest struct {
 	Color         *string `json:"color" form:"color"`
 	Size          *string `json:"size" form:"size"`
 	Material      *string `json:"material" form:"material"`
-	MountType     *string `json:"mount_type" form:"mount_type"`
+	MountType        *string `json:"mount_type" form:"mount_type"`
+	PhotoMontureURL *string `json:"photo_monture_url" form:"photo_monture_url"`
+	PhotoBrancheURL *string `json:"photo_branche_url" form:"photo_branche_url"`
+	PhotoArriereURL *string `json:"photo_arriere_url" form:"photo_arriere_url"`
 }
 
 // EffectiveBrand retourne la marque effective à enregistrer, en priorisant le champ brand
