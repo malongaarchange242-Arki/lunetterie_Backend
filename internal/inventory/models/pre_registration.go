@@ -3,8 +3,11 @@ package models
 import "time"
 
 type PreRegistrationPhoto struct {
-	ID  string `db:"id" json:"id"`
-	Src string `db:"src" json:"src"`
+	ID   string `db:"id" json:"id,omitempty"`
+	Kind string `db:"kind" json:"kind,omitempty"`
+	Src  string `db:"src" json:"src,omitempty"`
+	URL  string `db:"url" json:"url,omitempty"`
+	Name string `db:"name" json:"name,omitempty"`
 }
 
 type PreRegistrationCase struct {

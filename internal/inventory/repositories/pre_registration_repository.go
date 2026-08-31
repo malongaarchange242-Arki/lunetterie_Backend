@@ -86,7 +86,11 @@ func (r *PreRegistrationRepository) CreateBox(caseID int64, input models.PreRegi
 	if err != nil {
 		return fmt.Errorf("formes invalides: %w", err)
 	}
-	photos, err := json.Marshal(input.Photos)
+	photosList := input.Photos
+	if photosList == nil {
+		photosList = []models.PreRegistrationPhoto{}
+	}
+	photos, err := json.Marshal(photosList)
 	if err != nil {
 		return fmt.Errorf("photos invalides: %w", err)
 	}
