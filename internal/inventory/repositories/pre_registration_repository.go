@@ -86,10 +86,14 @@ func (r *PreRegistrationRepository) CreateBox(caseID int64, input models.PreRegi
 	if err != nil {
 		return fmt.Errorf("formes invalides: %w", err)
 	}
+	photos, err := json.Marshal(input.Photos)
+	if err != nil {
+		return fmt.Errorf("photos invalides: %w", err)
+	}
 	return r.db.QueryRowx(`
 		INSERT INTO pre_registration_boxes
-			(case_id, code, quantity, formes, marques, couleurs, matieres, gamme, type_lunette, prix)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
+			(case_id, code, quantity, formes, marques, couleurs, matieres, photos, gamme, type_lunette, prix)
+		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10, $11)
 		ON CONFLICT (code) DO UPDATE SET
 			case_id = EXCLUDED.case_id,
 			quantity = EXCLUDED.quantity,
@@ -97,13 +101,14 @@ func (r *PreRegistrationRepository) CreateBox(caseID int64, input models.PreRegi
 			marques = EXCLUDED.marques,
 			couleurs = EXCLUDED.couleurs,
 			matieres = EXCLUDED.matieres,
+			photos = EXCLUDED.photos,
 			gamme = EXCLUDED.gamme,
 			type_lunette = EXCLUDED.type_lunette,
 			prix = EXCLUDED.prix,
 			updated_at = NOW()
 		RETURNING id, created_at, updated_at`,
 		caseID, input.Code, input.Quantity, formes, pq.Array(input.Marques), pq.Array(input.Couleurs),
-		pq.Array(input.Matieres), input.Gamme, input.Type, input.Prix,
+		pq.Array(input.Matieres), photos, input.Gamme, input.Type, input.Prix,
 	).Scan(&input.ID, &input.CreatedAt, &input.UpdatedAt)
 }
 
@@ -117,6 +122,7 @@ func (r *PreRegistrationRepository) listBoxes(caseID int64) ([]models.PreRegistr
 		Marques   pq.StringArray `db:"marques"`
 		Couleurs  pq.StringArray `db:"couleurs"`
 		Matieres  pq.StringArray `db:"matieres"`
+		Photos    []byte         `db:"photos"`
 		Gamme     string         `db:"gamme"`
 		Type      string         `db:"type_lunette"`
 		Prix      float64        `db:"prix"`
@@ -125,7 +131,7 @@ func (r *PreRegistrationRepository) listBoxes(caseID int64) ([]models.PreRegistr
 	}
 	rows := make([]row, 0)
 	if err := r.db.Select(&rows, `
-		SELECT id, case_id, code, quantity, formes, marques, couleurs, matieres,
+		SELECT id, case_id, code, quantity, formes, marques, couleurs, matieres, photos,
 		       gamme, type_lunette, prix, created_at, updated_at
 		FROM pre_registration_boxes
 		WHERE case_id = $1
@@ -140,9 +146,15 @@ func (r *PreRegistrationRepository) listBoxes(caseID int64) ([]models.PreRegistr
 				return nil, fmt.Errorf("formes de carton invalides: %w", err)
 			}
 		}
+		photos := make([]models.PreRegistrationPhoto, 0)
+		if len(item.Photos) > 0 && string(item.Photos) != "null" {
+			if err := json.Unmarshal(item.Photos, &photos); err != nil {
+				return nil, fmt.Errorf("photos de carton invalides: %w", err)
+			}
+		}
 		boxes = append(boxes, models.PreRegistrationBox{
 			ID: item.ID, CaseID: item.CaseID, Code: item.Code, Quantity: item.Quantity, Formes: formes,
-			Marques: []string(item.Marques), Couleurs: []string(item.Couleurs), Matieres: []string(item.Matieres),
+			Marques: []string(item.Marques), Couleurs: []string(item.Couleurs), Matieres: []string(item.Matieres), Photos: photos,
 			Gamme: item.Gamme, Type: item.Type, Prix: item.Prix, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
 		})
 	}

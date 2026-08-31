@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS pre_registration_boxes (
     marques TEXT[] NOT NULL DEFAULT '{}',
     couleurs TEXT[] NOT NULL DEFAULT '{}',
     matieres TEXT[] NOT NULL DEFAULT '{}',
+    photos JSONB NOT NULL DEFAULT '[]'::jsonb,
     gamme VARCHAR(80) NOT NULL,
     type_lunette VARCHAR(80) NOT NULL,
     prix NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (prix >= 0),
