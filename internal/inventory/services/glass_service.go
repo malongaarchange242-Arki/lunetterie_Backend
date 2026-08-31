@@ -37,7 +37,7 @@ func (s *GlassService) CreateGlass(glass *models.Glass) error {
 		glass.Barcode = barcode
 	}
 	if glass.Status == "" {
-		glass.Status = models.StatusRecuFournisseur
+		glass.Status = models.StatusEnStockGeneral
 	}
 	return s.glasses.Create(glass)
 }

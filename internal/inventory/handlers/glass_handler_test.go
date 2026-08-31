@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"testing"
+
+	"github.com/lunetterie/backend/internal/inventory/models"
 )
 
 func TestParseCreateGlassRequest_AllowsStringNumbersAndNulls(t *testing.T) {
@@ -28,5 +30,8 @@ func TestParseCreateGlassRequest_AllowsStringNumbersAndNulls(t *testing.T) {
 	}
 	if glass.ReceptionCommandID != nil {
 		t.Fatalf("reception_command_id should be nil, got %#v", glass.ReceptionCommandID)
+	}
+	if glass.Status != models.StatusEnStockGeneral {
+		t.Fatalf("default status should be EN_STOCK_GENERAL, got %q", glass.Status)
 	}
 }

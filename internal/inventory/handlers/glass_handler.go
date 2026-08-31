@@ -281,7 +281,7 @@ func parseCreateGlassRequest(rawBody []byte) (*models.Glass, error) {
 		PhotoBrancheURL:    parseOptionalString(payload["photo_branche_url"]),
 		PhotoArriereURL:    parseOptionalString(payload["photo_arriere_url"]),
 		ReceptionCommandID: receptionCommandID,
-		Status:             models.StatusRecuFournisseur,
+		Status:             models.StatusEnStockGeneral,
 		IsReserved:         false,
 	}
 

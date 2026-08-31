@@ -37,7 +37,7 @@ func (s *TransactionalGlassService) CreateGlass(glass *models.Glass) (err error)
 		}
 	}
 	if glass.Status == "" {
-		glass.Status = models.StatusRecuFournisseur
+		glass.Status = models.StatusEnStockGeneral
 	}
 	tx, err := s.transactions.Begin()
 	if err != nil {
