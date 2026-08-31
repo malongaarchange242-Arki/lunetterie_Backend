@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/models"
@@ -79,16 +80,16 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 		return
 	}
 	item := models.PreRegistrationBox{
-		Code: req.Code,
+		Code:     req.Code,
 		Quantity: req.Quantity,
-		Formes: req.Formes,
-		Marques: req.Marques,
+		Formes:   req.Formes,
+		Marques:  req.Marques,
 		Couleurs: req.Couleurs,
 		Matieres: req.Matieres,
-		Photos: req.Photos,
-		Gamme: strings.TrimSpace(req.Gamme),
-		Type: strings.TrimSpace(req.Type),
-		Prix: req.Prix,
+		Photos:   req.Photos,
+		Gamme:    strings.TrimSpace(req.Gamme),
+		Type:     strings.TrimSpace(req.Type),
+		Prix:     req.Prix,
 	}
 	if strings.TrimSpace(item.Code) == "" {
 		item.Code = mustGenerateBoxCode(h.repo)
@@ -105,6 +106,32 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 	shared.Created(c, gin.H{"case": created, "barcode_image_url": "/api/v1/inventory/labels/" + created.Code + ".png"})
 }
 
+func sanitizeStorageToken(value string) string {
+	replacer := strings.NewReplacer("/", "-", "\\", "-", " ", "-", ".", "-")
+	clean := replacer.Replace(strings.TrimSpace(value))
+	clean = strings.Trim(clean, "-_ ")
+	if clean == "" {
+		return "photo"
+	}
+	return clean
+}
+
+func buildPhotoStoragePath(caseCode, boxCode, kind, photoID, fileName string) string {
+	kindToken := sanitizeStorageToken(kind)
+	if kindToken == "" {
+		kindToken = "photo"
+	}
+	fileBase := sanitizeStorageToken(fileName)
+	if fileBase == "photo" || fileBase == "" {
+		fileBase = "image"
+	}
+	seed := strings.TrimSpace(photoID)
+	if seed == "" {
+		seed = strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	return "pre-registration/" + strings.TrimSpace(caseCode) + "/" + strings.TrimSpace(boxCode) + "/" + seed + "-" + kindToken + "-" + fileBase + ".jpg"
+}
+
 func (h *PreRegistrationHandler) UploadBoxPhoto(c *gin.Context) {
 	if h.storageSvc == nil {
 		shared.InternalError(c, "service de stockage non initialisé")
@@ -113,6 +140,8 @@ func (h *PreRegistrationHandler) UploadBoxPhoto(c *gin.Context) {
 	caseCode := strings.TrimSpace(c.PostForm("caseCode"))
 	boxCode := strings.TrimSpace(c.PostForm("boxCode"))
 	kind := strings.TrimSpace(c.PostForm("kind"))
+	photoID := strings.TrimSpace(c.PostForm("photoId"))
+	fileName := strings.TrimSpace(c.PostForm("fileName"))
 	if caseCode == "" || boxCode == "" || kind == "" {
 		shared.BadRequest(c, "caseCode, boxCode et kind sont requis")
 		return
@@ -128,7 +157,7 @@ func (h *PreRegistrationHandler) UploadBoxPhoto(c *gin.Context) {
 		shared.BadRequest(c, "image illisible")
 		return
 	}
-	path := "pre-registration/" + caseCode + "/" + boxCode + "/" + kind + ".jpg"
+	path := buildPhotoStoragePath(caseCode, boxCode, kind, photoID, fileName)
 	url, err := h.storageSvc.Upload(path, data, header.Header.Get("Content-Type"))
 	if err != nil {
 		shared.InternalError(c, "Impossible d'uploader la photo: "+err.Error())

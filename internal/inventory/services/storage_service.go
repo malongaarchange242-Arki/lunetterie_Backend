@@ -36,7 +36,8 @@ func (s *StorageService) Upload(path string, data []byte, contentType string) (s
 	req.Header.Set("Authorization", "Bearer "+s.serviceKey)
 	req.Header.Set("apikey", s.serviceKey)
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("x-upsert", "true")
+	// On ne fait pas de upsert car deux photos du même type doivent rester distinctes
+	// et ne doivent pas écraser la précédente avec un nom identique.
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
