@@ -35,3 +35,23 @@ func TestParseCreateGlassRequest_AllowsStringNumbersAndNulls(t *testing.T) {
 		t.Fatalf("default status should be EN_STOCK_GENERAL, got %q", glass.Status)
 	}
 }
+
+func TestParseCreateGlassRequest_AllowsEmptyBarcodeForBackendGeneration(t *testing.T) {
+	payload := []byte(`{
+		"barcode": "",
+		"reference": "REF-43",
+		"price": "120000",
+		"notes": "test"
+	}`)
+
+	glass, err := parseCreateGlassRequest(payload)
+	if err != nil {
+		t.Fatalf("parseCreateGlassRequest returned error for empty barcode: %v", err)
+	}
+	if glass.Barcode != "" {
+		t.Fatalf("empty barcode should remain empty for backend generation, got %q", glass.Barcode)
+	}
+	if glass.Price == nil || *glass.Price != 120000 {
+		t.Fatalf("price should be 120000, got %#v", glass.Price)
+	}
+}

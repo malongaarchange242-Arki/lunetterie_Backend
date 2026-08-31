@@ -260,7 +260,7 @@ func parseCreateGlassRequest(rawBody []byte) (*models.Glass, error) {
 	barcode, _ := payload["barcode"].(string)
 	barcode = strings.TrimSpace(barcode)
 	if barcode == "" {
-		return nil, fmt.Errorf("le code-barres est obligatoire")
+		barcode = ""
 	}
 
 	price, err := parseOptionalFloat64(payload["price"])
