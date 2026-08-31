@@ -238,9 +238,9 @@ func (r *GlassRepository) GetStockNeeds() ([]models.StockNeedItem, error) {
 		"boutiques":          5,
 		"coefGeneral":        6.5,
 		"genre": map[string]int{
-			"Femme": 240,
-			"Homme": 210,
-			"Mixte": 90,
+			"Femme":  240,
+			"Homme":  210,
+			"Mixte":  90,
 			"Enfant": 60,
 		},
 		"type": map[string]int{
@@ -312,15 +312,24 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url,
-			COALESCE(ga.reference, NULL) AS reference,
-			COALESCE(ga.brand, NULLIF(pb.marques[1], ''), NULL) AS brand,
+			ga.reference,
+			COALESCE(ga.brand,
+				CASE WHEN array_length(pb.marques, 1) IS NOT NULL AND array_length(pb.marques, 1) > 0 THEN pb.marques[1] ELSE NULL END,
+				NULL
+			) AS brand,
 			COALESCE(ga.gender, pc.genre, NULL) AS gender,
-			COALESCE(ga.shape, (SELECT key FROM jsonb_object_keys(COALESCE(pb.formes, '{}'::jsonb)) AS key LIMIT 1), NULL) AS shape,
-			COALESCE(ga.color, NULLIF(pb.couleurs[1], ''), NULL) AS color,
-			COALESCE(ga.size, NULL) AS size,
-			COALESCE(ga.material, NULLIF(pb.matieres[1], ''), NULL) AS material,
+			COALESCE(ga.shape, first_form.first_form_key, NULL) AS shape,
+			COALESCE(ga.color,
+				CASE WHEN array_length(pb.couleurs, 1) IS NOT NULL AND array_length(pb.couleurs, 1) > 0 THEN pb.couleurs[1] ELSE NULL END,
+				NULL
+			) AS color,
+			ga.size,
+			COALESCE(ga.material,
+				CASE WHEN array_length(pb.matieres, 1) IS NOT NULL AND array_length(pb.matieres, 1) > 0 THEN pb.matieres[1] ELSE NULL END,
+				NULL
+			) AS material,
 			COALESCE(ga.mount_type, pb.type_lunette, NULL) AS mount_type,
-			COALESCE(ga.gamme, pb.gamme, pc.gamme, so.gamme, '') AS gamme,
+			COALESCE(pb.gamme, pc.gamme, so.gamme, '') AS gamme,
 			sl.code AS location_code,
 			parent_sl.code AS valise_code,
 			reg.author AS registered_by,
@@ -338,6 +347,11 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 			LIMIT 1
 		) ga ON TRUE
 		LEFT JOIN pre_registration_boxes pb ON g.barcode LIKE (pb.code || '%')
+		LEFT JOIN LATERAL (
+			SELECT key AS first_form_key
+			FROM jsonb_object_keys(COALESCE(pb.formes, '{}'::jsonb)) AS key
+			LIMIT 1
+		) first_form ON TRUE
 		LEFT JOIN pre_registration_cases pc ON pc.id = pb.case_id
 		LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
 		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
@@ -362,15 +376,24 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
 			g.photo_monture_url,
-			COALESCE(ga.reference, NULL) AS reference,
-			COALESCE(ga.brand, NULLIF(pb.marques[1], ''), NULL) AS brand,
+			ga.reference,
+			COALESCE(ga.brand,
+				CASE WHEN array_length(pb.marques, 1) IS NOT NULL AND array_length(pb.marques, 1) > 0 THEN pb.marques[1] ELSE NULL END,
+				NULL
+			) AS brand,
 			COALESCE(ga.gender, pc.genre, NULL) AS gender,
-			COALESCE(ga.shape, (SELECT key FROM jsonb_object_keys(COALESCE(pb.formes, '{}'::jsonb)) AS key LIMIT 1), NULL) AS shape,
-			COALESCE(ga.color, NULLIF(pb.couleurs[1], ''), NULL) AS color,
-			COALESCE(ga.size, NULL) AS size,
-			COALESCE(ga.material, NULLIF(pb.matieres[1], ''), NULL) AS material,
+			COALESCE(ga.shape, first_form.first_form_key, NULL) AS shape,
+			COALESCE(ga.color,
+				CASE WHEN array_length(pb.couleurs, 1) IS NOT NULL AND array_length(pb.couleurs, 1) > 0 THEN pb.couleurs[1] ELSE NULL END,
+				NULL
+			) AS color,
+			ga.size,
+			COALESCE(ga.material,
+				CASE WHEN array_length(pb.matieres, 1) IS NOT NULL AND array_length(pb.matieres, 1) > 0 THEN pb.matieres[1] ELSE NULL END,
+				NULL
+			) AS material,
 			COALESCE(ga.mount_type, pb.type_lunette, NULL) AS mount_type,
-			COALESCE(ga.gamme, pb.gamme, pc.gamme, so.gamme, '') AS gamme,
+			COALESCE(pb.gamme, pc.gamme, so.gamme, '') AS gamme,
 			sl.code AS location_code,
 			parent_sl.code AS valise_code
 		FROM glasses g
@@ -382,6 +405,11 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 			LIMIT 1
 		) ga ON TRUE
 		LEFT JOIN pre_registration_boxes pb ON g.barcode LIKE (pb.code || '%')
+		LEFT JOIN LATERAL (
+			SELECT key AS first_form_key
+			FROM jsonb_object_keys(COALESCE(pb.formes, '{}'::jsonb)) AS key
+			LIMIT 1
+		) first_form ON TRUE
 		LEFT JOIN pre_registration_cases pc ON pc.id = pb.case_id
 		LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
 		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
