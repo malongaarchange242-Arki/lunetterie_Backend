@@ -146,30 +146,30 @@ func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 // POST /api/v1/inventory/glasses
 func (h *GlassHandler) CreateGlass(c *gin.Context) {
 	var req struct {
-		Barcode            string  `json:"barcode"`
-		Reference          string  `json:"reference"`
-		FrameModelID       *int64  `json:"frame_model_id,omitempty"`
+		Barcode            string   `json:"barcode"`
+		Reference          string   `json:"reference"`
+		FrameModelID       *int64   `json:"frame_model_id,omitempty"`
 		Price              *float64 `json:"price"`
 		PhotoMontureURL    *string  `json:"photo_monture_url,omitempty"`
 		PhotoBrancheURL    *string  `json:"photo_branche_url,omitempty"`
 		PhotoArriereURL    *string  `json:"photo_arriere_url,omitempty"`
-		ReceptionCommandID *int64  `json:"reception_command_id,omitempty"`
+		ReceptionCommandID *int64   `json:"reception_command_id,omitempty"`
 		Notes              *string  `json:"notes,omitempty"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		shared.BadRequest(c, "Données invalides")
 		return
 	}
-	
+
 	if req.Barcode == "" {
 		shared.BadRequest(c, "Le code-barres est obligatoire")
 		return
 	}
-	
+
 	// Get default station (Stock général)
 	stationID := int64(1) // Default station - adjust if needed
-	
+
 	glass := &models.Glass{
 		Barcode:            req.Barcode,
 		StationID:          stationID,
@@ -181,17 +181,17 @@ func (h *GlassHandler) CreateGlass(c *gin.Context) {
 		Status:             models.StatusRecuFournisseur,
 		IsReserved:         false,
 	}
-	
+
 	if req.Notes != nil && *req.Notes != "" {
 		glass.Notes = req.Notes
 	}
-	
+
 	// Create glass via mutation service
 	if err := h.mutations.CreateGlass(glass); err != nil {
 		shared.InternalError(c, "Impossible de créer la monture: "+err.Error())
 		return
 	}
-	
+
 	shared.Created(c, gin.H{"glass": glass})
 }
 
