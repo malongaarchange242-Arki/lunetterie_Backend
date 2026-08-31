@@ -223,6 +223,29 @@ func (r *PreRegistrationRepository) DeleteBox(boxID int64) error {
 	return nil
 }
 
+func (r *PreRegistrationRepository) UpdateBoxPhotos(caseID, boxID int64, photos []models.PreRegistrationPhoto) error {
+	payload, err := json.Marshal(photos)
+	if err != nil {
+		return fmt.Errorf("photos invalides: %w", err)
+	}
+	result, err := r.db.Exec(`
+		UPDATE pre_registration_boxes
+		SET photos = $3::jsonb,
+		    updated_at = NOW()
+		WHERE case_id = $1 AND id = $2`, caseID, boxID, payload)
+	if err != nil {
+		return fmt.Errorf("impossible de sauvegarder les photos du carton: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("impossible de vérifier le carton photo: %w", err)
+	}
+	if count == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func NewPreRegistrationCase(code, couleur, hex, gamme, genre string, montures int) models.PreRegistrationCase {
 	return models.PreRegistrationCase{Code: code, Couleur: couleur, Hex: hex, Gamme: gamme, Genre: genre, Montures: montures, CreatedAt: time.Time{}}
 }

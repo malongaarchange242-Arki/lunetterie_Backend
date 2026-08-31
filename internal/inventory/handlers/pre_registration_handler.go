@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -8,15 +9,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lunetterie/backend/internal/inventory/models"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
+	"github.com/lunetterie/backend/internal/inventory/services"
 	"github.com/lunetterie/backend/internal/shared"
 )
 
 type PreRegistrationHandler struct {
-	repo *repositories.PreRegistrationRepository
+	repo       *repositories.PreRegistrationRepository
+	storageSvc *services.StorageService
 }
 
-func NewPreRegistrationHandler(repo *repositories.PreRegistrationRepository) *PreRegistrationHandler {
-	return &PreRegistrationHandler{repo: repo}
+func NewPreRegistrationHandler(repo *repositories.PreRegistrationRepository, storageSvc *services.StorageService) *PreRegistrationHandler {
+	return &PreRegistrationHandler{repo: repo, storageSvc: storageSvc}
 }
 
 func (h *PreRegistrationHandler) ListCases(c *gin.Context) {
@@ -76,9 +79,19 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 		return
 	}
 	item := models.PreRegistrationBox{
-		Code: mustGenerateBoxCode(h.repo), Quantity: req.Quantity, Formes: req.Formes,
-		Marques: req.Marques, Couleurs: req.Couleurs, Matieres: req.Matieres,
-		Gamme: strings.TrimSpace(req.Gamme), Type: strings.TrimSpace(req.Type), Prix: req.Prix,
+		Code: req.Code,
+		Quantity: req.Quantity,
+		Formes: req.Formes,
+		Marques: req.Marques,
+		Couleurs: req.Couleurs,
+		Matieres: req.Matieres,
+		Photos: req.Photos,
+		Gamme: strings.TrimSpace(req.Gamme),
+		Type: strings.TrimSpace(req.Type),
+		Prix: req.Prix,
+	}
+	if strings.TrimSpace(item.Code) == "" {
+		item.Code = mustGenerateBoxCode(h.repo)
 	}
 	if err := h.repo.CreateBox(caseID, item); err != nil {
 		shared.InternalError(c, "Impossible de créer le carton: "+err.Error())
@@ -90,6 +103,68 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 		return
 	}
 	shared.Created(c, gin.H{"case": created, "barcode_image_url": "/api/v1/inventory/labels/" + created.Code + ".png"})
+}
+
+func (h *PreRegistrationHandler) UploadBoxPhoto(c *gin.Context) {
+	if h.storageSvc == nil {
+		shared.InternalError(c, "service de stockage non initialisé")
+		return
+	}
+	caseCode := strings.TrimSpace(c.PostForm("caseCode"))
+	boxCode := strings.TrimSpace(c.PostForm("boxCode"))
+	kind := strings.TrimSpace(c.PostForm("kind"))
+	if caseCode == "" || boxCode == "" || kind == "" {
+		shared.BadRequest(c, "caseCode, boxCode et kind sont requis")
+		return
+	}
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		shared.BadRequest(c, "image requise")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		shared.BadRequest(c, "image illisible")
+		return
+	}
+	path := "pre-registration/" + caseCode + "/" + boxCode + "/" + kind + ".jpg"
+	url, err := h.storageSvc.Upload(path, data, header.Header.Get("Content-Type"))
+	if err != nil {
+		shared.InternalError(c, "Impossible d'uploader la photo: "+err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"kind": kind, "url": url, "path": path})
+}
+
+func (h *PreRegistrationHandler) UpdateBoxPhotos(c *gin.Context) {
+	caseID, err := strconv.ParseInt(c.Param("caseId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de valise invalide")
+		return
+	}
+	boxID, err := strconv.ParseInt(c.Param("boxId"), 10, 64)
+	if err != nil {
+		shared.BadRequest(c, "identifiant de carton invalide")
+		return
+	}
+	var req struct {
+		Photos []models.PreRegistrationPhoto `json:"photos"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "payload invalide")
+		return
+	}
+	if err := h.repo.UpdateBoxPhotos(caseID, boxID, req.Photos); err != nil {
+		shared.InternalError(c, "Impossible de sauvegarder les photos du carton: "+err.Error())
+		return
+	}
+	box, err := h.repo.GetBox(caseID, boxID)
+	if err != nil {
+		shared.InternalError(c, "Impossible de récupérer le carton mis à jour")
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"box": box})
 }
 
 func (h *PreRegistrationHandler) ScanBox(c *gin.Context) {
