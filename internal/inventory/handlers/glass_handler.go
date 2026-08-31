@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -142,51 +145,168 @@ func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 	shared.Success(c, http.StatusOK, response)
 }
 
-// CreateGlass crée une nouvelle monture au stock général à partir du pré-enregistrement
-// POST /api/v1/inventory/glasses
-func (h *GlassHandler) CreateGlass(c *gin.Context) {
-	var req struct {
-		Barcode            string   `json:"barcode"`
-		Reference          string   `json:"reference"`
-		FrameModelID       *int64   `json:"frame_model_id,omitempty"`
-		Price              *float64 `json:"price"`
-		PhotoMontureURL    *string  `json:"photo_monture_url,omitempty"`
-		PhotoBrancheURL    *string  `json:"photo_branche_url,omitempty"`
-		PhotoArriereURL    *string  `json:"photo_arriere_url,omitempty"`
-		ReceptionCommandID *int64   `json:"reception_command_id,omitempty"`
-		Notes              *string  `json:"notes,omitempty"`
+func parseOptionalString(v any) *string {
+	if v == nil {
+		return nil
+	}
+	switch value := v.(type) {
+	case string:
+		if value == "" {
+			return nil
+		}
+		return &value
+	case fmt.Stringer:
+		text := value.String()
+		if text == "" {
+			return nil
+		}
+		return &text
+	default:
+		text := fmt.Sprint(value)
+		if text == "" || text == "<nil>" {
+			return nil
+		}
+		return &text
+	}
+}
+
+func parseOptionalFloat64(v any) (*float64, error) {
+	if v == nil {
+		return nil, nil
+	}
+	switch value := v.(type) {
+	case float64:
+		return &value, nil
+	case float32:
+		floatValue := float64(value)
+		return &floatValue, nil
+	case int:
+		floatValue := float64(value)
+		return &floatValue, nil
+	case int32:
+		floatValue := float64(value)
+		return &floatValue, nil
+	case int64:
+		floatValue := float64(value)
+		return &floatValue, nil
+	case string:
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || trimmed == "null" {
+			return nil, nil
+		}
+		floatValue, err := strconv.ParseFloat(trimmed, 64)
+		if err != nil {
+			return nil, err
+		}
+		return &floatValue, nil
+	default:
+		text := strings.TrimSpace(fmt.Sprint(value))
+		if text == "" || text == "<nil>" || text == "null" {
+			return nil, nil
+		}
+		floatValue, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return nil, err
+		}
+		return &floatValue, nil
+	}
+}
+
+func parseOptionalInt64(v any) (*int64, error) {
+	if v == nil {
+		return nil, nil
+	}
+	switch value := v.(type) {
+	case int:
+		intValue := int64(value)
+		return &intValue, nil
+	case int32:
+		intValue := int64(value)
+		return &intValue, nil
+	case int64:
+		return &value, nil
+	case float64:
+		intValue := int64(value)
+		return &intValue, nil
+	case string:
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || trimmed == "null" {
+			return nil, nil
+		}
+		intValue, err := strconv.ParseInt(trimmed, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return &intValue, nil
+	default:
+		text := strings.TrimSpace(fmt.Sprint(value))
+		if text == "" || text == "<nil>" || text == "null" {
+			return nil, nil
+		}
+		intValue, err := strconv.ParseInt(text, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return &intValue, nil
+	}
+}
+
+func parseCreateGlassRequest(rawBody []byte) (*models.Glass, error) {
+	var payload map[string]any
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		return nil, err
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.BadRequest(c, "Données invalides")
-		return
+	barcode, _ := payload["barcode"].(string)
+	barcode = strings.TrimSpace(barcode)
+	if barcode == "" {
+		return nil, fmt.Errorf("le code-barres est obligatoire")
 	}
 
-	if req.Barcode == "" {
-		shared.BadRequest(c, "Le code-barres est obligatoire")
-		return
+	price, err := parseOptionalFloat64(payload["price"])
+	if err != nil {
+		return nil, fmt.Errorf("price invalide: %w", err)
 	}
 
-	// Get default station (Stock général)
-	stationID := int64(1) // Default station - adjust if needed
+	receptionCommandID, err := parseOptionalInt64(payload["reception_command_id"])
+	if err != nil {
+		return nil, fmt.Errorf("reception_command_id invalide: %w", err)
+	}
 
 	glass := &models.Glass{
-		Barcode:            req.Barcode,
-		StationID:          stationID,
-		Price:              req.Price,
-		PhotoMontureURL:    req.PhotoMontureURL,
-		PhotoBrancheURL:    req.PhotoBrancheURL,
-		PhotoArriereURL:    req.PhotoArriereURL,
-		ReceptionCommandID: req.ReceptionCommandID,
+		Barcode:            barcode,
+		StationID:          1,
+		Price:              price,
+		PhotoMontureURL:    parseOptionalString(payload["photo_monture_url"]),
+		PhotoBrancheURL:    parseOptionalString(payload["photo_branche_url"]),
+		PhotoArriereURL:    parseOptionalString(payload["photo_arriere_url"]),
+		ReceptionCommandID: receptionCommandID,
 		Status:             models.StatusRecuFournisseur,
 		IsReserved:         false,
 	}
 
-	if req.Notes != nil && *req.Notes != "" {
-		glass.Notes = req.Notes
+	if notes := parseOptionalString(payload["notes"]); notes != nil && *notes != "" {
+		glass.Notes = notes
 	}
 
-	// Create glass via mutation service
+	return glass, nil
+}
+
+// CreateGlass crée une nouvelle monture au stock général à partir du pré-enregistrement
+// POST /api/v1/inventory/glasses
+func (h *GlassHandler) CreateGlass(c *gin.Context) {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		shared.BadRequest(c, "Données invalides")
+		return
+	}
+
+	glass, err := parseCreateGlassRequest(body)
+	if err != nil {
+		shared.BadRequest(c, "Données invalides: "+err.Error())
+		return
+	}
+
 	if err := h.mutations.CreateGlass(glass); err != nil {
 		shared.InternalError(c, "Impossible de créer la monture: "+err.Error())
 		return
