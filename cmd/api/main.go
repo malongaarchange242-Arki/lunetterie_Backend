@@ -665,6 +665,7 @@ func main() {
 			inventory.GET("/glasses", glassHandler.ListGlasses)
 			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
 			inventory.GET("/glasses/:barcode/similar", glassHandler.GetSimilarGlasses)
+			inventory.POST("/glasses", glassHandler.CreateGlass)
 			inventory.POST("/glasses/:barcode/relocate", glassHandler.RelocateGlass)
 			inventory.GET("/stock-summary", glassHandler.GetStockSummary)
 			inventory.GET("/config/stock-thresholds", glassHandler.GetStockThresholdConfig)

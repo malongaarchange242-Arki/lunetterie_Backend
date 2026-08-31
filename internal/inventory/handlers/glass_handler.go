@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lunetterie/backend/internal/inventory/models"
 	"github.com/lunetterie/backend/internal/inventory/repositories"
 	"github.com/lunetterie/backend/internal/inventory/services"
 	"github.com/lunetterie/backend/internal/shared"
@@ -20,6 +21,7 @@ type GlassHandler struct {
 }
 
 type glassMutationService interface {
+	CreateGlass(glass *models.Glass) error
 	AssignGlass(glassID, cartonID, userID int64) error
 	MoveGlass(glassID, cartonID, userID int64) error
 	ReserveGlass(glassID, reservationID, userID int64) error
@@ -138,6 +140,59 @@ func (h *GlassHandler) GetGlassByBarcode(c *gin.Context) {
 		response["placement_note"] = placementNote
 	}
 	shared.Success(c, http.StatusOK, response)
+}
+
+// CreateGlass crée une nouvelle monture au stock général à partir du pré-enregistrement
+// POST /api/v1/inventory/glasses
+func (h *GlassHandler) CreateGlass(c *gin.Context) {
+	var req struct {
+		Barcode            string  `json:"barcode"`
+		Reference          string  `json:"reference"`
+		FrameModelID       *int64  `json:"frame_model_id,omitempty"`
+		Price              *float64 `json:"price"`
+		PhotoMontureURL    *string  `json:"photo_monture_url,omitempty"`
+		PhotoBrancheURL    *string  `json:"photo_branche_url,omitempty"`
+		PhotoArriereURL    *string  `json:"photo_arriere_url,omitempty"`
+		ReceptionCommandID *int64  `json:"reception_command_id,omitempty"`
+		Notes              *string  `json:"notes,omitempty"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "Données invalides")
+		return
+	}
+	
+	if req.Barcode == "" {
+		shared.BadRequest(c, "Le code-barres est obligatoire")
+		return
+	}
+	
+	// Get default station (Stock général)
+	stationID := int64(1) // Default station - adjust if needed
+	
+	glass := &models.Glass{
+		Barcode:            req.Barcode,
+		StationID:          stationID,
+		Price:              req.Price,
+		PhotoMontureURL:    req.PhotoMontureURL,
+		PhotoBrancheURL:    req.PhotoBrancheURL,
+		PhotoArriereURL:    req.PhotoArriereURL,
+		ReceptionCommandID: req.ReceptionCommandID,
+		Status:             models.StatusRecuFournisseur,
+		IsReserved:         false,
+	}
+	
+	if req.Notes != nil && *req.Notes != "" {
+		glass.Notes = req.Notes
+	}
+	
+	// Create glass via mutation service
+	if err := h.mutations.CreateGlass(glass); err != nil {
+		shared.InternalError(c, "Impossible de créer la monture: "+err.Error())
+		return
+	}
+	
+	shared.Created(c, gin.H{"glass": glass})
 }
 
 // RelocateGlass réattribue un emplacement libre à une monture, dans la même zone de la même
