@@ -94,3 +94,31 @@ func (h *AnalyzeHandler) HandleAnalyze(c *gin.Context) {
 	shared.Success(c, http.StatusOK, result)
 }
 
+// HandleAnalyzeBranche analyse explicitement une photo de branche par OCR.
+func (h *AnalyzeHandler) HandleAnalyzeBranche(c *gin.Context) {
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		shared.BadRequest(c, "Image requise")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
+		shared.BadRequest(c, "Format d'image non supporté (JPEG, PNG ou WebP requis)")
+		return
+	}
+	imageBytes, err := io.ReadAll(file)
+	if err != nil || len(imageBytes) == 0 {
+		shared.BadRequest(c, "Image vide ou illisible")
+		return
+	}
+
+	result, err := h.aiService.AnalyzeBranch(imageBytes, header.Filename, contentType)
+	if err != nil {
+		shared.InternalError(c, "Erreur lors de l'analyse de la branche: "+err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, result)
+}
+

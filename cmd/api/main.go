@@ -661,6 +661,7 @@ func main() {
 				supplierOrders.DELETE("/:id", supplierOrderHandler.Delete)
 			}
 			inventory.POST("/analyze", analyzeHandler.HandleAnalyze)
+			inventory.POST("/analyze-branche", analyzeHandler.HandleAnalyzeBranche)
 			inventory.POST("/repairs/lun-cng-analysis", authMiddleware.RequireRoles(1, 2, 8, 12), repairHandler.RepairLunCngAnalysis)
 			inventory.GET("/glasses", glassHandler.ListGlasses)
 			inventory.GET("/glasses/:barcode", glassHandler.GetGlassByBarcode)
