@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"mime/multipart"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/lunetterie/backend/internal/inventory/dto"
@@ -20,6 +22,28 @@ func derefString(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func readReceptionPhoto(file multipart.File, rawURL *string, label string) ([]byte, error) {
+	if file != nil {
+		return io.ReadAll(file)
+	}
+	if rawURL == nil || strings.TrimSpace(*rawURL) == "" {
+		return nil, fmt.Errorf("image %s requise", label)
+	}
+	parsed, err := url.Parse(strings.TrimSpace(*rawURL))
+	if err != nil || parsed.Scheme != "https" || !strings.HasSuffix(parsed.Hostname(), ".supabase.co") {
+		return nil, fmt.Errorf("URL image %s invalide", label)
+	}
+	response, err := http.Get(parsed.String())
+	if err != nil {
+		return nil, fmt.Errorf("image %s inaccessible: %w", label, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("image %s inaccessible (HTTP %d)", label, response.StatusCode)
+	}
+	return io.ReadAll(response.Body)
 }
 
 // ReceptionWorkflow orchestrate le workflow complet de réception
@@ -72,20 +96,20 @@ func NewReceptionWorkflow(
 func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multipart.File, brancheImage multipart.File, arriereImage multipart.File, userID int64) (*dto.ReceptionResponse, error) {
 	log.Printf("🚀 Démarrage workflow réception - User: %d, Station: %d", userID, req.StationID)
 
-	montureBytes, err := io.ReadAll(montureImage)
+	montureBytes, err := readReceptionPhoto(montureImage, req.PhotoMontureURL, "monture")
 	if err != nil {
 		return nil, fmt.Errorf("erreur lecture image monture: %w", err)
 	}
 	var brancheBytes []byte
-	if brancheImage != nil {
-		brancheBytes, err = io.ReadAll(brancheImage)
+	if brancheImage != nil || (req.PhotoBrancheURL != nil && strings.TrimSpace(*req.PhotoBrancheURL) != "") {
+		brancheBytes, err = readReceptionPhoto(brancheImage, req.PhotoBrancheURL, "branche")
 		if err != nil {
 			return nil, fmt.Errorf("erreur lecture image branche: %w", err)
 		}
 	}
 	var arriereBytes []byte
-	if arriereImage != nil {
-		arriereBytes, err = io.ReadAll(arriereImage)
+	if arriereImage != nil || (req.PhotoArriereURL != nil && strings.TrimSpace(*req.PhotoArriereURL) != "") {
+		arriereBytes, err = readReceptionPhoto(arriereImage, req.PhotoArriereURL, "arrière")
 		if err != nil {
 			return nil, fmt.Errorf("erreur lecture image arrière: %w", err)
 		}

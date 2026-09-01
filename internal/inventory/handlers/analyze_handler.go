@@ -25,7 +25,7 @@ func NewAnalyzeHandler(aiService *services.AIService) *AnalyzeHandler {
 func (h *AnalyzeHandler) HandleAnalyze(c *gin.Context) {
 	// 0. Déterminer le kind (monture ou branche)
 	kind := c.DefaultQuery("kind", "monture")
-	
+
 	// 1. Récupération du fichier
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
@@ -65,13 +65,13 @@ func (h *AnalyzeHandler) HandleAnalyze(c *gin.Context) {
 	// 6. Appel du service AI avec le kind approprié
 	var result interface{}
 	var analyzeErr error
-	
+
 	if kind == "branche" {
 		result, analyzeErr = h.aiService.AnalyzeBranch(imageBytes, header.Filename, contentType)
 	} else {
 		result, analyzeErr = h.aiService.Analyze(imageBytes, header.Filename, contentType)
 	}
-	
+
 	if analyzeErr != nil {
 		// Log complet de l'erreur
 		log.Printf("ERREUR AI Analyze: %v", analyzeErr)
@@ -121,4 +121,3 @@ func (h *AnalyzeHandler) HandleAnalyzeBranche(c *gin.Context) {
 	}
 	shared.Success(c, http.StatusOK, result)
 }
-

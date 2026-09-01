@@ -76,6 +76,7 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 	}
 
 	var montureFile multipart.File
+	var montureURL *string
 	if formFile, montureHeader, err := c.Request.FormFile("image"); err == nil {
 		montureFile = formFile
 		defer montureFile.Close()
@@ -86,6 +87,8 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 	} else if isBlank(req.PhotoMontureURL) {
 		shared.BadRequest(c, "Image de monture requise")
 		return
+	} else {
+		montureURL = req.PhotoMontureURL
 	}
 
 	var brancheFile multipart.File
@@ -108,6 +111,9 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 		}
 	}
 
+	if montureFile == nil && montureURL != nil {
+		req.PhotoMontureURL = montureURL
+	}
 	result, err := h.workflow.Execute(req, montureFile, brancheFile, arriereFile, userID)
 	if err != nil {
 		message := "Erreur lors de la réception: " + err.Error()
