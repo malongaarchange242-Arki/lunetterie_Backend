@@ -159,10 +159,42 @@ func mapValidationStatus(status string) string {
 
 func toValidationPayload(list models.SendList, items []models.SendListItem) gin.H {
 	uids := make([]string, 0, len(items))
+	itemPayload := make([]gin.H, 0, len(items))
 	for _, item := range items {
-		if item.Barcode != nil && strings.TrimSpace(*item.Barcode) != "" {
-			uids = append(uids, strings.TrimSpace(*item.Barcode))
+		barcode := ""
+		if item.Barcode != nil {
+			barcode = strings.TrimSpace(*item.Barcode)
 		}
+		if barcode != "" {
+			uids = append(uids, barcode)
+		}
+
+		ref := ""
+		if item.Reference != nil {
+			ref = strings.TrimSpace(*item.Reference)
+		}
+		brand := ""
+		if item.Brand != nil {
+			brand = strings.TrimSpace(*item.Brand)
+		}
+		location := "—"
+		if item.LocationCode != nil {
+			location = strings.TrimSpace(*item.LocationCode)
+			if location == "" {
+				location = "—"
+			}
+		}
+
+		itemPayload = append(itemPayload, gin.H{
+			"uid":          barcode,
+			"barcode":      barcode,
+			"reference":    ref,
+			"ref":          ref,
+			"brand":        brand,
+			"marque":       brand,
+			"location_code": location,
+			"emplacement":  location,
+		})
 	}
 
 	date := list.CreatedAt.Format("2006-01-02")
@@ -180,6 +212,7 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 		"besoin":      list.ItemCount,
 		"statut":      mapValidationStatus(list.Status),
 		"uids":        uids,
+		"items":       itemPayload,
 		"cartonCode":  "",
 		"type":        "Tous",
 		"gamme":       "Toutes",

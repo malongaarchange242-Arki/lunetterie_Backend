@@ -15,6 +15,10 @@ import (
 	"github.com/lunetterie/backend/internal/inventory/services"
 )
 
+func nextPreRegistrationBoxCode(sequence int64) string {
+	return fmt.Sprintf("CTN-%04d", sequence)
+}
+
 // derefString rend la chaîne pointée, ou vide si le pointeur est nul — les champs
 // facultatifs du formulaire de réception arrivent tous en pointeurs.
 func derefString(value *string) string {

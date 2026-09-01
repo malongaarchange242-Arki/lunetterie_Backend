@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/lunetterie/backend/internal/inventory/models"
 )
 
@@ -123,6 +124,80 @@ func (s *AllocationService) resolveStorageStationID(
 	return storageStationID, nil
 }
 
+func nextPreRegistrationBoxCode(sequence int64) string {
+	return fmt.Sprintf("CTN-%04d", sequence)
+}
+
+func (s *AllocationService) createNextPreRegistrationCarton(
+	lookupStationID int64,
+	valise *models.StorageLocation,
+	carton struct {
+		BoxID    int64  `db:"box_id"`
+		BoxCode  string `db:"box_code"`
+		Quantity int    `db:"quantity"`
+		CaseID   int64  `db:"case_id"`
+		CaseCode string `db:"case_code"`
+		Formes   []byte `db:"formes"`
+		Marques  []string `db:"marques"`
+		Couleurs []string `db:"couleurs"`
+		Matieres []string `db:"matieres"`
+		Photos   []byte `db:"photos"`
+		Gamme    string `db:"gamme"`
+		BoxType  string `db:"type_lunette"`
+		Prix     float64 `db:"prix"`
+	},
+) (*models.StorageLocation, error) {
+	var sequence int64
+	if err := s.db.Get(&sequence, `SELECT nextval('carton_code_seq')`); err != nil {
+		return nil, fmt.Errorf("impossible de générer le code du carton suivant: %w", err)
+	}
+	newCode := nextPreRegistrationBoxCode(sequence)
+
+	var newBoxID int64
+	if err := s.db.Get(&newBoxID, `
+		INSERT INTO pre_registration_boxes (
+			case_id, code, quantity, formes, marques, couleurs, matieres, photos, gamme, type_lunette, prix
+		)
+		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10, $11)
+		RETURNING id`,
+		carton.CaseID,
+		newCode,
+		carton.Quantity,
+		string(carton.Formes),
+		pq.Array(carton.Marques),
+		pq.Array(carton.Couleurs),
+		pq.Array(carton.Matieres),
+		string(carton.Photos),
+		carton.Gamme,
+		carton.BoxType,
+		carton.Prix,
+	); err != nil {
+		return nil, fmt.Errorf("impossible de créer un nouveau carton pour la même commande: %w", err)
+	}
+
+	var location models.StorageLocation
+	if err := s.db.Get(&location, `
+		INSERT INTO storage_locations (station_id, parent_location_id, zone, code, name, type, barcode, capacity, status)
+		VALUES ($1, $2, 'STOCK', $3, $4, 'CARTON', $3, $5, 'LIBRE')
+		ON CONFLICT (station_id, zone, code) DO UPDATE SET
+			parent_location_id = EXCLUDED.parent_location_id,
+			name = EXCLUDED.name,
+			barcode = COALESCE(storage_locations.barcode, EXCLUDED.barcode),
+			capacity = EXCLUDED.capacity
+		RETURNING id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at`,
+		lookupStationID,
+		valise.ID,
+		newCode,
+		"Carton "+newCode,
+		carton.Quantity,
+	); err != nil {
+		return nil, fmt.Errorf("impossible de préparer le carton %s: %w", newCode, err)
+	}
+
+	_ = newBoxID
+	return &location, nil
+}
+
 func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 	stationID int64,
 	commandCode *string,
@@ -144,6 +219,14 @@ func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 		Quantity int    `db:"quantity"`
 		CaseID   int64  `db:"case_id"`
 		CaseCode string `db:"case_code"`
+		Formes   []byte `db:"formes"`
+		Marques  []string `db:"marques"`
+		Couleurs []string `db:"couleurs"`
+		Matieres []string `db:"matieres"`
+		Photos   []byte `db:"photos"`
+		Gamme    string `db:"gamme"`
+		BoxType  string `db:"type_lunette"`
+		Prix     float64 `db:"prix"`
 	}
 
 	var idArg any
@@ -162,7 +245,9 @@ func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 	var carton preRegistrationCarton
 	if err := s.db.Get(&carton, `
 		SELECT b.id AS box_id, b.code AS box_code, b.quantity,
-		       c.id AS case_id, c.code AS case_code
+		       c.id AS case_id, c.code AS case_code,
+		       b.formes, b.marques, b.couleurs, b.matieres, b.photos,
+		       b.gamme, b.type_lunette, b.prix
 		FROM pre_registration_boxes b
 		JOIN pre_registration_cases c ON c.id = b.case_id
 		JOIN reception_commands rc ON rc.id = c.reception_command_id
@@ -206,7 +291,12 @@ func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 		}
 		if count >= *location.Capacity {
 			log.Printf("⚠️ Capacité carton atteinte: box_id=%d code=%s station=%d location_id=%d count=%d capacity=%d", carton.BoxID, carton.BoxCode, lookupStationID, location.ID, count, *location.Capacity)
-			return nil, fmt.Errorf("capacite du carton %s atteinte", carton.BoxCode)
+			nextLocation, nextErr := s.createNextPreRegistrationCarton(lookupStationID, &valise, carton)
+			if nextErr != nil {
+				return nil, nextErr
+			}
+			log.Printf("✅ Nouveau carton créé pour la même commande: %s", nextLocation.Code)
+			return nextLocation, nil
 		}
 	}
 

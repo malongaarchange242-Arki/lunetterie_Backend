@@ -53,3 +53,9 @@ func TestGlassSupportsRearPhotoURL(t *testing.T) {
 		t.Fatalf("expected rear photo URL %q, got %#v", url, glass.PhotoArriereURL)
 	}
 }
+
+func TestNextPreRegistrationBoxCodeFormatsSequence(t *testing.T) {
+	if got := nextPreRegistrationBoxCode(42); got != "CTN-0042" {
+		t.Fatalf("expected next carton code CTN-0042, got %q", got)
+	}
+}
