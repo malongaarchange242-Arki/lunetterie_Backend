@@ -30,3 +30,31 @@ type ReceptionCommandCreateRequest struct {
 type ReceptionCommandResponse struct {
 	Command ReceptionCommand `json:"command"`
 }
+
+type ShipmentData struct {
+	Valises []PreRegistrationCase `json:"valises"`
+	Total   int                   `json:"total"`
+	Date    *time.Time            `json:"date,omitempty"`
+	ArriveDate *time.Time          `json:"arriveDate,omitempty"`
+}
+
+type ReceptionCommandWithShip struct {
+	ID                    int64           `json:"id"`
+	Code                  string          `json:"code"`
+	TargetCount           int             `json:"target_count"`
+	RegisteredCount       int             `json:"registered_count"`
+	Status                string          `json:"status"`
+	PreRegistrationStatus string          `json:"pre_registration_status"`
+	ShipmentStatus        string          `json:"shipment_status"`
+	DispatchedAt          *time.Time      `json:"dispatched_at,omitempty"`
+	ArrivedAt             *time.Time      `json:"arrived_at,omitempty"`
+	SupplierOrderID       *int64          `json:"supplier_order_id,omitempty"`
+	OrderGender           string          `json:"gender,omitempty"`
+	OrderProvenance       string          `json:"provenance,omitempty"`
+	OrderGamme            string          `json:"gamme,omitempty"`
+	CreatedBy             *int64          `json:"created_by,omitempty"`
+	ActivatedAt           *time.Time      `json:"activated_at,omitempty"`
+	CreatedAt             time.Time       `json:"created_at"`
+	UpdatedAt             time.Time       `json:"updated_at"`
+	Ship                  *ShipmentData   `json:"ship,omitempty"`
+}

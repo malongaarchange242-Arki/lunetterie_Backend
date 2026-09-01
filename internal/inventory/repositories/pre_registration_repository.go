@@ -53,6 +53,35 @@ func (r *PreRegistrationRepository) ListCases(commandCode string) ([]models.PreR
 	return cases, nil
 }
 
+func (r *PreRegistrationRepository) GetShipmentDataByCommandID(commandID int64) (*models.ShipmentData, error) {
+	cases := make([]models.PreRegistrationCase, 0)
+	err := r.db.Select(&cases, `
+		SELECT id, reception_command_id, code, couleur, COALESCE(hex, '') AS hex, gamme, genre,
+		       montures, validated, shipment_scanned, shipment_scanned_at, created_at, updated_at
+		FROM pre_registration_cases
+		WHERE reception_command_id = $1
+		ORDER BY created_at ASC`, commandID)
+	if err != nil {
+		return nil, fmt.Errorf("impossible de lister les valises: %w", err)
+	}
+	for index := range cases {
+		cases[index].Cartons, err = r.listBoxes(cases[index].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
+	total := 0
+	for _, c := range cases {
+		total += c.Montures
+	}
+	
+	return &models.ShipmentData{
+		Valises: cases,
+		Total: total,
+	}, nil
+}
+
 func (r *PreRegistrationRepository) NextCaseCode() (string, error) {
 	var sequence int64
 	if err := r.db.Get(&sequence, `SELECT nextval('valise_code_seq')`); err != nil {
