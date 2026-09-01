@@ -311,7 +311,18 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 	items := []models.GlassListItem{}
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url,
+			COALESCE(
+				g.photo_monture_url,
+				(
+					SELECT p->>'src'
+					FROM jsonb_array_elements(COALESCE(pb.photos, '[]'::jsonb)) AS p
+					WHERE lower(COALESCE(p->>'kind', '')) = 'face'
+					   OR lower(COALESCE(p->>'view', '')) = 'face'
+					   OR lower(COALESCE(p->>'type', '')) = 'face'
+					   OR p->>'src' ~* 'face|front|avant'
+					LIMIT 1
+				)
+			) AS photo_monture_url,
 			ga.reference,
 			COALESCE(ga.brand,
 				CASE WHEN array_length(pb.marques, 1) IS NOT NULL AND array_length(pb.marques, 1) > 0 THEN pb.marques[1] ELSE NULL END,
@@ -348,13 +359,13 @@ func (r *GlassRepository) FindByStatusesFiltered(statuses []string, registeredOn
 			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
 			LIMIT 1
 		) ga ON TRUE
-		LEFT JOIN pre_registration_boxes pb ON g.barcode LIKE (pb.code || '%')
+		LEFT JOIN pre_registration_cases pc ON pc.reception_command_id = g.reception_command_id
+		LEFT JOIN pre_registration_boxes pb ON pb.case_id = pc.id
 		LEFT JOIN LATERAL (
 			SELECT key AS first_form_key
 			FROM jsonb_object_keys(COALESCE(pb.formes, '{}'::jsonb)) AS key
 			LIMIT 1
 		) first_form ON TRUE
-		LEFT JOIN pre_registration_cases pc ON pc.id = pb.case_id
 		LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
 		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
@@ -377,7 +388,18 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 	items := []models.GlassListItem{}
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url,
+			COALESCE(
+				g.photo_monture_url,
+				(
+					SELECT p->>'src'
+					FROM jsonb_array_elements(COALESCE(pb.photos, '[]'::jsonb)) AS p
+					WHERE lower(COALESCE(p->>'kind', '')) = 'face'
+					   OR lower(COALESCE(p->>'view', '')) = 'face'
+					   OR lower(COALESCE(p->>'type', '')) = 'face'
+					   OR p->>'src' ~* 'face|front|avant'
+					LIMIT 1
+				)
+			) AS photo_monture_url,
 			ga.reference,
 			COALESCE(ga.brand,
 				CASE WHEN array_length(pb.marques, 1) IS NOT NULL AND array_length(pb.marques, 1) > 0 THEN pb.marques[1] ELSE NULL END,
@@ -408,13 +430,13 @@ func (r *GlassRepository) FindByReceptionCommand(commandID int64) ([]models.Glas
 			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
 			LIMIT 1
 		) ga ON TRUE
-		LEFT JOIN pre_registration_boxes pb ON g.barcode LIKE (pb.code || '%')
+		LEFT JOIN pre_registration_cases pc ON pc.reception_command_id = g.reception_command_id
+		LEFT JOIN pre_registration_boxes pb ON pb.case_id = pc.id
 		LEFT JOIN LATERAL (
 			SELECT key AS first_form_key
 			FROM jsonb_object_keys(COALESCE(pb.formes, '{}'::jsonb)) AS key
 			LIMIT 1
 		) first_form ON TRUE
-		LEFT JOIN pre_registration_cases pc ON pc.id = pb.case_id
 		LEFT JOIN reception_commands rc ON rc.id = g.reception_command_id
 		LEFT JOIN supplier_orders so ON so.id = rc.supplier_order_id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
@@ -534,7 +556,8 @@ func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.Glas
 			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
 			LIMIT 1
 		) ga ON TRUE
-		LEFT JOIN pre_registration_boxes pb ON g.barcode LIKE (pb.code || '%')
+		LEFT JOIN pre_registration_cases pc ON pc.reception_command_id = g.reception_command_id
+		LEFT JOIN pre_registration_boxes pb ON pb.case_id = pc.id
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id
 		WHERE g.status = ANY($1) AND g.id != $2
