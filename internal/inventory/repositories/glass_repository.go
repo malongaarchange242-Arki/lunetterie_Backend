@@ -512,7 +512,18 @@ func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.Glas
 	items := []models.GlassListItem{}
 	query := `
 		SELECT g.id, g.barcode, g.station_id, s.name AS station_name, g.status, g.price, g.created_at, g.reception_command_id,
-			g.photo_monture_url,
+			COALESCE(
+				g.photo_monture_url,
+				(
+					SELECT p->>'src'
+					FROM jsonb_array_elements(COALESCE(pb.photos, '[]'::jsonb)) AS p
+					WHERE lower(COALESCE(p->>'kind', '')) = 'face'
+					   OR lower(COALESCE(p->>'view', '')) = 'face'
+					   OR lower(COALESCE(p->>'type', '')) = 'face'
+					   OR p->>'src' ~* 'face|front|avant'
+					LIMIT 1
+				)
+			) AS photo_monture_url,
 			ga.reference, ga.brand, ga.gender, ga.shape, ga.color, ga.size, ga.material,
 			sl.code AS location_code
 		FROM glasses g
@@ -523,6 +534,7 @@ func (r *GlassRepository) FindAvailableExcluding(excludeID int64) ([]models.Glas
 			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
 			LIMIT 1
 		) ga ON TRUE
+		LEFT JOIN pre_registration_boxes pb ON g.barcode LIKE (pb.code || '%')
 		LEFT JOIN storage_locations sl ON sl.id = g.location_id
 		LEFT JOIN stations s ON s.id = g.station_id
 		WHERE g.status = ANY($1) AND g.id != $2
