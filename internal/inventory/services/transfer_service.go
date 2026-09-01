@@ -77,7 +77,7 @@ func (s *TransferService) AddItem(transferID int64, barcode string) (*models.Tra
 		return nil, nil, fmt.Errorf("monture introuvable: %w", err)
 	}
 	if glass.StationID != transfer.FromStationID {
-		return nil, nil, fmt.Errorf("cette monture ne se trouve pas dans la station de départ du transfert")
+		return nil, nil, fmt.Errorf("cette monture ne se trouve pas dans la station de départ du transfert (station de la monture: %d, station de départ: %d)", glass.StationID, transfer.FromStationID)
 	}
 	if !transferableStatuses[glass.Status] {
 		return nil, nil, fmt.Errorf("cette monture ne peut pas être transférée (statut actuel: %s)", glass.Status)

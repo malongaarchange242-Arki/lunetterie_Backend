@@ -1,0 +1,2 @@
+-- The station alignment is a corrective data migration and is intentionally not reversed.
+-- The previous station cannot be determined reliably after the correction.
