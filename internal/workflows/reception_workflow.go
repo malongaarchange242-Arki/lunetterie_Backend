@@ -151,10 +151,12 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 		photoMontureURL = &url
 	}
 	var photoBrancheURL *string
-	if url, err := w.storageService.Upload(barcode+"/branche.jpg", brancheBytes, "image/jpeg"); err != nil {
-		log.Printf("⚠️  Erreur upload photo branche: %v", err)
-	} else {
-		photoBrancheURL = &url
+	if len(brancheBytes) > 0 {
+		if url, err := w.storageService.Upload(barcode+"/branche.jpg", brancheBytes, "image/jpeg"); err != nil {
+			log.Printf("⚠️  Erreur upload photo branche: %v", err)
+		} else {
+			photoBrancheURL = &url
+		}
 	}
 	var photoArriereURL *string
 	if len(arriereBytes) > 0 {

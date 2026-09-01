@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"mime/multipart"
 	"strconv"
 	"strings"
@@ -117,6 +118,7 @@ func (h *ReceptionHandler) HandleReception(c *gin.Context) {
 	result, err := h.workflow.Execute(req, montureFile, brancheFile, arriereFile, userID)
 	if err != nil {
 		message := "Erreur lors de la réception: " + err.Error()
+		log.Printf("⚠️ Réception refusée: user_id=%d station_id=%d carton_id=%v carton_code=%v erreur=%v", userID, req.StationID, req.PreRegistrationBoxID, req.CartonCode, err)
 		if isReceptionClientError(err) {
 			shared.BadRequest(c, message)
 			return

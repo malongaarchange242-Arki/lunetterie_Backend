@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -204,6 +205,7 @@ func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 			return nil, fmt.Errorf("impossible de verifier la capacite du carton %s: %w", carton.BoxCode, err)
 		}
 		if count >= *location.Capacity {
+			log.Printf("⚠️ Capacité carton atteinte: box_id=%d code=%s station=%d location_id=%d count=%d capacity=%d", carton.BoxID, carton.BoxCode, lookupStationID, location.ID, count, *location.Capacity)
 			return nil, fmt.Errorf("capacite du carton %s atteinte", carton.BoxCode)
 		}
 	}
