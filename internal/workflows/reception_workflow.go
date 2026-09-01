@@ -76,9 +76,12 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	if err != nil {
 		return nil, fmt.Errorf("erreur lecture image monture: %w", err)
 	}
-	brancheBytes, err := io.ReadAll(brancheImage)
-	if err != nil {
-		return nil, fmt.Errorf("erreur lecture image branche: %w", err)
+	var brancheBytes []byte
+	if brancheImage != nil {
+		brancheBytes, err = io.ReadAll(brancheImage)
+		if err != nil {
+			return nil, fmt.Errorf("erreur lecture image branche: %w", err)
+		}
 	}
 	var arriereBytes []byte
 	if arriereImage != nil {
