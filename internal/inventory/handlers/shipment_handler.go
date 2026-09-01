@@ -97,14 +97,23 @@ func (h *ShipmentHandler) MarkArrived(c *gin.Context) {
 		shared.NotFound(c, "Commande introuvable")
 		return
 	}
+	if command.ShipmentStatus == "arrived" {
+		shared.Success(c, http.StatusOK, gin.H{
+			"arrived":    true,
+			"arrivingAt": command.ArrivedAt.Format(time.RFC3339),
+			"message":    "Commande déjà arrivée au stock",
+		})
+		return
+	}
 	if command.ShipmentStatus != "in_transit" {
 		shared.BadRequest(c, "Seules les commandes en transit peuvent arriver")
 		return
 	}
+	if err := h.preRegRepo.MarkCommandArrived(code); err != nil {
+		shared.InternalError(c, "Impossible de marquer la commande comme arrivée: "+err.Error())
+		return
+	}
 	now := time.Now()
-	// Note: on fait juste retourner OK pour maintenant; on pourrait ajouter
-	// une méthode de persistence MarkAsArrived si on veut vraiment le faire
-	// passer dans la DB. Pour le moment, on sync juste via shipment_scanned.
 	shared.Success(c, http.StatusOK, gin.H{
 		"arrived":    true,
 		"arrivingAt": now.Format(time.RFC3339),
