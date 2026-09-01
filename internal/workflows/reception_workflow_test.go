@@ -5,6 +5,7 @@ import (
 
 	"github.com/lunetterie/backend/internal/inventory/dto"
 	"github.com/lunetterie/backend/internal/inventory/models"
+	"github.com/lunetterie/backend/internal/inventory/services"
 )
 
 func TestResolveReceptionCommandIDPrefersExplicitID(t *testing.T) {
@@ -57,5 +58,12 @@ func TestGlassSupportsRearPhotoURL(t *testing.T) {
 func TestNextPreRegistrationBoxCodeFormatsSequence(t *testing.T) {
 	if got := nextPreRegistrationBoxCode(42); got != "CTN-0042" {
 		t.Fatalf("expected next carton code CTN-0042, got %q", got)
+	}
+}
+
+func TestStorageServiceRejectsIncompleteSupabaseConfiguration(t *testing.T) {
+	svc := services.NewStorageService("", "", "glasses-photos")
+	if _, err := svc.Upload("test.jpg", []byte("abc"), "image/jpeg"); err == nil {
+		t.Fatal("expected incomplete Supabase config to fail")
 	}
 }

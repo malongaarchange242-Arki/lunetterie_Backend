@@ -150,7 +150,7 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 	log.Println("📤 Upload des photos...")
 	var photoMontureURL *string
 	if url, err := w.storageService.Upload(barcode+"/monture.jpg", montureBytes, "image/jpeg"); err != nil {
-		log.Printf("⚠️  Erreur upload photo monture: %v", err)
+		return nil, fmt.Errorf("impossible d'uploader la photo de monture: %w", err)
 	} else {
 		photoMontureURL = &url
 	}

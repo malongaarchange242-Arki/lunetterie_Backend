@@ -186,14 +186,14 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 		}
 
 		itemPayload = append(itemPayload, gin.H{
-			"uid":          barcode,
-			"barcode":      barcode,
-			"reference":    ref,
-			"ref":          ref,
-			"brand":        brand,
-			"marque":       brand,
+			"uid":           barcode,
+			"barcode":       barcode,
+			"reference":     ref,
+			"ref":           ref,
+			"brand":         brand,
+			"marque":        brand,
 			"location_code": location,
-			"emplacement":  location,
+			"emplacement":   location,
 		})
 	}
 
@@ -202,24 +202,34 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 		date = list.CreatedAt.Format("02/01/2006")
 	}
 	return gin.H{
-		"id":          list.ID,
-		"ref":         list.SessionCode,
-		"magasin":     list.City,
-		"source":      func() string { if list.DestinationStationName != nil { return *list.DestinationStationName }; return "Stock général" }(),
-		"origine":     "auto",
-		"date":        date,
-		"motif":       fmt.Sprintf("Liste %s vers %s", list.SessionCode, list.City),
-		"besoin":      list.ItemCount,
-		"statut":      mapValidationStatus(list.Status),
-		"uids":        uids,
-		"items":       itemPayload,
-		"cartonCode":  "",
-		"type":        "Tous",
-		"gamme":       "Toutes",
-		"genre":       "Tous",
-		"couleur":     "Toutes",
-		"urgence":     "Normale",
-		"sourceLabel": func() string { if list.DestinationStationName != nil { return *list.DestinationStationName }; return "Stock général" }(),
+		"id":      list.ID,
+		"ref":     list.SessionCode,
+		"magasin": list.City,
+		"source": func() string {
+			if list.DestinationStationName != nil {
+				return *list.DestinationStationName
+			}
+			return "Stock général"
+		}(),
+		"origine":    "auto",
+		"date":       date,
+		"motif":      fmt.Sprintf("Liste %s vers %s", list.SessionCode, list.City),
+		"besoin":     list.ItemCount,
+		"statut":     mapValidationStatus(list.Status),
+		"uids":       uids,
+		"items":      itemPayload,
+		"cartonCode": "",
+		"type":       "Tous",
+		"gamme":      "Toutes",
+		"genre":      "Tous",
+		"couleur":    "Toutes",
+		"urgence":    "Normale",
+		"sourceLabel": func() string {
+			if list.DestinationStationName != nil {
+				return *list.DestinationStationName
+			}
+			return "Stock général"
+		}(),
 	}
 }
 

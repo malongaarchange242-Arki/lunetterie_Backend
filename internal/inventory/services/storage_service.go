@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // StorageService gère l'upload des photos vers le bucket Supabase Storage
@@ -27,6 +28,13 @@ func NewStorageService(supabaseURL, serviceKey, bucket string) *StorageService {
 
 // Upload envoie une image dans le bucket et renvoie son URL publique
 func (s *StorageService) Upload(path string, data []byte, contentType string) (string, error) {
+	if strings.TrimSpace(s.supabaseURL) == "" || strings.TrimSpace(s.serviceKey) == "" || strings.TrimSpace(s.bucket) == "" {
+		return "", fmt.Errorf("configuration Supabase Storage incomplète: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY et bucket requis")
+	}
+	if !strings.HasPrefix(s.supabaseURL, "http://") && !strings.HasPrefix(s.supabaseURL, "https://") {
+		return "", fmt.Errorf("SUPABASE_URL invalide: %q", s.supabaseURL)
+	}
+
 	url := fmt.Sprintf("%s/storage/v1/object/%s/%s", s.supabaseURL, s.bucket, path)
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))

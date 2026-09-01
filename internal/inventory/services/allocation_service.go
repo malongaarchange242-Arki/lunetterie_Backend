@@ -132,19 +132,19 @@ func (s *AllocationService) createNextPreRegistrationCarton(
 	lookupStationID int64,
 	valise *models.StorageLocation,
 	carton struct {
-		BoxID    int64  `db:"box_id"`
-		BoxCode  string `db:"box_code"`
-		Quantity int    `db:"quantity"`
-		CaseID   int64  `db:"case_id"`
-		CaseCode string `db:"case_code"`
-		Formes   []byte `db:"formes"`
+		BoxID    int64    `db:"box_id"`
+		BoxCode  string   `db:"box_code"`
+		Quantity int      `db:"quantity"`
+		CaseID   int64    `db:"case_id"`
+		CaseCode string   `db:"case_code"`
+		Formes   []byte   `db:"formes"`
 		Marques  []string `db:"marques"`
 		Couleurs []string `db:"couleurs"`
 		Matieres []string `db:"matieres"`
-		Photos   []byte `db:"photos"`
-		Gamme    string `db:"gamme"`
-		BoxType  string `db:"type_lunette"`
-		Prix     float64 `db:"prix"`
+		Photos   []byte   `db:"photos"`
+		Gamme    string   `db:"gamme"`
+		BoxType  string   `db:"type_lunette"`
+		Prix     float64  `db:"prix"`
 	},
 ) (*models.StorageLocation, error) {
 	var sequence int64
@@ -214,19 +214,19 @@ func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 	}
 
 	type preRegistrationCarton struct {
-		BoxID    int64  `db:"box_id"`
-		BoxCode  string `db:"box_code"`
-		Quantity int    `db:"quantity"`
-		CaseID   int64  `db:"case_id"`
-		CaseCode string `db:"case_code"`
-		Formes   []byte `db:"formes"`
+		BoxID    int64    `db:"box_id"`
+		BoxCode  string   `db:"box_code"`
+		Quantity int      `db:"quantity"`
+		CaseID   int64    `db:"case_id"`
+		CaseCode string   `db:"case_code"`
+		Formes   []byte   `db:"formes"`
 		Marques  []string `db:"marques"`
 		Couleurs []string `db:"couleurs"`
 		Matieres []string `db:"matieres"`
-		Photos   []byte `db:"photos"`
-		Gamme    string `db:"gamme"`
-		BoxType  string `db:"type_lunette"`
-		Prix     float64 `db:"prix"`
+		Photos   []byte   `db:"photos"`
+		Gamme    string   `db:"gamme"`
+		BoxType  string   `db:"type_lunette"`
+		Prix     float64  `db:"prix"`
 	}
 
 	var idArg any
