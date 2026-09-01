@@ -1,22 +1,9 @@
--- Station centrale de stockage des montures
-INSERT INTO stations (name, type, city)
-SELECT 'Stock Général', 'STOCK_GENERAL', 'Pointe-Noire'
+-- Add missing Stock Général station and storage locations
+INSERT INTO stations (name, type, city, is_active)
+SELECT 'Stock Général', 'STOCK_GENERAL', 'Pointe-Noire', true
 WHERE NOT EXISTS (SELECT 1 FROM stations WHERE name = 'Stock Général');
 
--- Sous-stations utilisées par le flux d'envoi/réception (scan.html)
-INSERT INTO stations (name, type, city)
-SELECT 'Station Pointe-Noire', 'SOUS_STATION', 'Pointe-Noire'
-WHERE NOT EXISTS (SELECT 1 FROM stations WHERE name = 'Station Pointe-Noire');
-
-INSERT INTO stations (name, type, city)
-SELECT 'Présentoir', 'SOUS_STATION', 'Brazzaville'
-WHERE NOT EXISTS (SELECT 1 FROM stations WHERE name = 'Présentoir');
-
-INSERT INTO stations (name, type, city)
-SELECT 'Laboratoire', 'SOUS_STATION', 'Brazzaville'
-WHERE NOT EXISTS (SELECT 1 FROM stations WHERE name = 'Laboratoire');
-
--- Emplacements de stockage pour "Stock Général"
+-- Add storage locations for Stock Général if it now exists
 -- Create VALISE containers (top-level) that can hold glasses directly
 DO $$
 DECLARE
@@ -40,3 +27,6 @@ BEGIN
     END IF;
   END IF;
 END $$;
+
+
+

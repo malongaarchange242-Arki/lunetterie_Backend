@@ -87,19 +87,19 @@ func (s *AllocationService) resolveStorageStationID(
 
 	var storageStationID int64
 
+	// Stratégie de recherche :
+	// 1. Si la station demandée est "Stock Général", la retourner directement
+	// 2. Chercher "Stock Général" dans la même ville (si la ville existe)
+	// 3. Sinon, chercher "Stock Général" n'importe où
 	query := `
 		SELECT id
 		FROM stations
-		WHERE city = (
-			SELECT city
-			FROM stations
-			WHERE id = $1
-		)
-		AND name ILIKE 'Stock Général%'
+		WHERE name ILIKE 'Stock Général%'
 		ORDER BY
 			CASE
 				WHEN id = $1 THEN 0
-				ELSE 1
+				WHEN city = (SELECT city FROM stations WHERE id = $1 AND city IS NOT NULL) THEN 1
+				ELSE 2
 			END,
 			id
 		LIMIT 1
