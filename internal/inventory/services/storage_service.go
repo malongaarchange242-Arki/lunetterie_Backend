@@ -35,7 +35,7 @@ func (s *StorageService) Upload(path string, data []byte, contentType string) (s
 		return "", fmt.Errorf("SUPABASE_URL invalide: %q", s.supabaseURL)
 	}
 
-	url := fmt.Sprintf("%s/storage/v1/object/%s/%s", s.supabaseURL, s.bucket, path)
+	url := fmt.Sprintf("%s/storage/v1/object/%s/%s?upsert=true", s.supabaseURL, s.bucket, path)
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
