@@ -42,12 +42,12 @@ func (r *GlassRepository) Create(glass *models.Glass) error {
 		INSERT INTO glasses (
 			barcode, serial_number, frame_model_id, station_id,
 			location_id, supplier_id, delivery_id, analysis_id,
-			status, is_reserved, reserved_for_order, price,
+			status, is_reserved, reserved_for_order, price, reference,
 			photo_monture_url, photo_branche_url, photo_arriere_url, reception_command_id, notes
 		) VALUES (
 			:barcode, :serial_number, :frame_model_id, :station_id,
 			:location_id, :supplier_id, :delivery_id, :analysis_id,
-			:status, :is_reserved, :reserved_for_order, :price,
+			:status, :is_reserved, :reserved_for_order, :price, :reference,
 			:photo_monture_url, :photo_branche_url, :photo_arriere_url, :reception_command_id, :notes
 		) RETURNING id, created_at, updated_at`
 

@@ -206,6 +206,7 @@ func (w *ReceptionWorkflow) Execute(req dto.ReceptionRequest, montureImage multi
 		SupplierID:         req.SupplierID,
 		Status:             models.StatusEnStockGeneral,
 		Price:              req.Price,
+		Reference:          req.Reference,
 		PhotoMontureURL:    photoMontureURL,
 		PhotoBrancheURL:    photoBrancheURL,
 		PhotoArriereURL:    photoArriereURL,

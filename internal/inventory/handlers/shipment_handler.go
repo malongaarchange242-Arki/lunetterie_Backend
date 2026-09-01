@@ -70,7 +70,7 @@ func (h *ShipmentHandler) GetArrivedCommands(c *gin.Context) {
 		shared.InternalError(c, "Impossible de récupérer les commandes arrivées: "+err.Error())
 		return
 	}
-	
+
 	enriched := make([]map[string]interface{}, 0, len(commands))
 	for _, cmd := range commands {
 		shipment, _ := h.preRegRepo.GetShipmentDataByCommandID(cmd.ID)
@@ -78,26 +78,26 @@ func (h *ShipmentHandler) GetArrivedCommands(c *gin.Context) {
 			shipment.Date = cmd.DispatchedAt
 			shipment.ArriveDate = cmd.ArrivedAt
 		}
-		
+
 		data := map[string]interface{}{
-			"id": cmd.ID,
-			"code": cmd.Code,
-			"target_count": cmd.TargetCount,
-			"registered_count": cmd.RegisteredCount,
-			"status": cmd.Status,
+			"id":                      cmd.ID,
+			"code":                    cmd.Code,
+			"target_count":            cmd.TargetCount,
+			"registered_count":        cmd.RegisteredCount,
+			"status":                  cmd.Status,
 			"pre_registration_status": cmd.PreRegistrationStatus,
-			"shipment_status": cmd.ShipmentStatus,
-			"dispatched_at": cmd.DispatchedAt,
-			"arrived_at": cmd.ArrivedAt,
-			"supplier_order_id": cmd.SupplierOrderID,
-			"gender": cmd.OrderGender,
-			"provenance": cmd.OrderProvenance,
-			"gamme": cmd.OrderGamme,
-			"created_by": cmd.CreatedBy,
-			"activated_at": cmd.ActivatedAt,
-			"created_at": cmd.CreatedAt,
-			"updated_at": cmd.UpdatedAt,
-			"ship": shipment,
+			"shipment_status":         cmd.ShipmentStatus,
+			"dispatched_at":           cmd.DispatchedAt,
+			"arrived_at":              cmd.ArrivedAt,
+			"supplier_order_id":       cmd.SupplierOrderID,
+			"gender":                  cmd.OrderGender,
+			"provenance":              cmd.OrderProvenance,
+			"gamme":                   cmd.OrderGamme,
+			"created_by":              cmd.CreatedBy,
+			"activated_at":            cmd.ActivatedAt,
+			"created_at":              cmd.CreatedAt,
+			"updated_at":              cmd.UpdatedAt,
+			"ship":                    shipment,
 		}
 		enriched = append(enriched, data)
 	}
@@ -113,7 +113,7 @@ func (h *ShipmentHandler) ListShipmentCommands(c *gin.Context) {
 		shared.InternalError(c, "Impossible de récupérer les expéditions: "+err.Error())
 		return
 	}
-	
+
 	enriched := make([]map[string]interface{}, 0, len(commands))
 	for _, cmd := range commands {
 		shipment, _ := h.preRegRepo.GetShipmentDataByCommandID(cmd.ID)
@@ -121,26 +121,26 @@ func (h *ShipmentHandler) ListShipmentCommands(c *gin.Context) {
 			shipment.Date = cmd.DispatchedAt
 			shipment.ArriveDate = cmd.ArrivedAt
 		}
-		
+
 		data := map[string]interface{}{
-			"id": cmd.ID,
-			"code": cmd.Code,
-			"target_count": cmd.TargetCount,
-			"registered_count": cmd.RegisteredCount,
-			"status": cmd.Status,
+			"id":                      cmd.ID,
+			"code":                    cmd.Code,
+			"target_count":            cmd.TargetCount,
+			"registered_count":        cmd.RegisteredCount,
+			"status":                  cmd.Status,
 			"pre_registration_status": cmd.PreRegistrationStatus,
-			"shipment_status": cmd.ShipmentStatus,
-			"dispatched_at": cmd.DispatchedAt,
-			"arrived_at": cmd.ArrivedAt,
-			"supplier_order_id": cmd.SupplierOrderID,
-			"gender": cmd.OrderGender,
-			"provenance": cmd.OrderProvenance,
-			"gamme": cmd.OrderGamme,
-			"created_by": cmd.CreatedBy,
-			"activated_at": cmd.ActivatedAt,
-			"created_at": cmd.CreatedAt,
-			"updated_at": cmd.UpdatedAt,
-			"ship": shipment,
+			"shipment_status":         cmd.ShipmentStatus,
+			"dispatched_at":           cmd.DispatchedAt,
+			"arrived_at":              cmd.ArrivedAt,
+			"supplier_order_id":       cmd.SupplierOrderID,
+			"gender":                  cmd.OrderGender,
+			"provenance":              cmd.OrderProvenance,
+			"gamme":                   cmd.OrderGamme,
+			"created_by":              cmd.CreatedBy,
+			"activated_at":            cmd.ActivatedAt,
+			"created_at":              cmd.CreatedAt,
+			"updated_at":              cmd.UpdatedAt,
+			"ship":                    shipment,
 		}
 		enriched = append(enriched, data)
 	}

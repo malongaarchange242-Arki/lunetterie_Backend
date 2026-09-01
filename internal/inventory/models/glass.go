@@ -21,6 +21,7 @@ type Glass struct {
 	IsReserved         bool        `db:"is_reserved" json:"is_reserved"`
 	ReservedForOrder   *int64      `db:"reserved_for_order" json:"reserved_for_order,omitempty"`
 	Price              *float64    `db:"price" json:"price,omitempty"`
+	Reference          *string     `db:"reference" json:"reference,omitempty"`
 	PhotoMontureURL    *string     `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
 	PhotoBrancheURL    *string     `db:"photo_branche_url" json:"photo_branche_url,omitempty"`
 	PhotoArriereURL    *string     `db:"photo_arriere_url" json:"photo_arriere_url,omitempty"`

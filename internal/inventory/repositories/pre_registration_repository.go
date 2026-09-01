@@ -70,15 +70,15 @@ func (r *PreRegistrationRepository) GetShipmentDataByCommandID(commandID int64) 
 			return nil, err
 		}
 	}
-	
+
 	total := 0
 	for _, c := range cases {
 		total += c.Montures
 	}
-	
+
 	return &models.ShipmentData{
 		Valises: cases,
-		Total: total,
+		Total:   total,
 	}, nil
 }
 
