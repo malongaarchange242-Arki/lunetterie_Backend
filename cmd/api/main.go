@@ -621,6 +621,7 @@ func main() {
 			inventory.GET("/barcodes/next", authMiddleware.RequireRoles(1, 2, 3, 8, 12), barcodeHandler.Next)
 			inventory.GET("/labels/*code", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), barcodeHandler.Label)
 			inventory.POST("/reception", receptionHandler.HandleReception)
+			inventory.GET("/catalogue/pre-registration-boxes", authMiddleware.RequireRoles(1, 2, 3, 8, 11, 12), preRegistrationHandler.ListCatalogueBoxes)
 			// Créer une session de réception reste réservé à la direction/admin ; la lister,
 			// consulter un code précis et l'incrémenter sont ouverts aux rôles qui traitent
 			// physiquement les montures, dont PRE_ENREGISTREMENT (rôle 11).

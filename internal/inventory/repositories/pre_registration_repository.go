@@ -53,6 +53,62 @@ func (r *PreRegistrationRepository) ListCases(commandCode string) ([]models.PreR
 	return cases, nil
 }
 
+func (r *PreRegistrationRepository) ListCatalogueBoxes() ([]models.PreRegistrationCatalogueBox, error) {
+	var rows []struct {
+		ID          int64          `db:"id"`
+		CaseID      int64          `db:"case_id"`
+		Code        string         `db:"code"`
+		Quantity    int            `db:"quantity"`
+		Formes      []byte         `db:"formes"`
+		Marques     pq.StringArray `db:"marques"`
+		Couleurs    pq.StringArray `db:"couleurs"`
+		Matieres    pq.StringArray `db:"matieres"`
+		Photos      []byte         `db:"photos"`
+		Gamme       string         `db:"gamme"`
+		Type        string         `db:"type_lunette"`
+		Prix        float64        `db:"prix"`
+		CreatedAt   time.Time      `db:"created_at"`
+		UpdatedAt   time.Time      `db:"updated_at"`
+		CaseCode    string         `db:"case_code"`
+		CaseCouleur string         `db:"case_couleur"`
+		CaseGenre   string         `db:"case_genre"`
+	}
+	err := r.db.Select(&rows, `
+		SELECT b.id, b.case_id, b.code, b.quantity, b.formes, b.marques, b.couleurs, b.matieres,
+		       b.photos, b.gamme, b.type_lunette, b.prix, b.created_at, b.updated_at,
+		       c.code AS case_code, c.couleur AS case_couleur, c.genre AS case_genre
+		FROM pre_registration_boxes b
+		JOIN pre_registration_cases c ON c.id = b.case_id
+		ORDER BY b.created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("impossible de lister les cartons du catalogue: %w", err)
+	}
+	boxes := make([]models.PreRegistrationCatalogueBox, 0, len(rows))
+	for _, row := range rows {
+		formes := map[string]int{}
+		if len(row.Formes) > 0 {
+			if err := json.Unmarshal(row.Formes, &formes); err != nil {
+				return nil, fmt.Errorf("formes de carton invalides: %w", err)
+			}
+		}
+		photos := make([]models.PreRegistrationPhoto, 0)
+		if len(row.Photos) > 0 && string(row.Photos) != "null" {
+			if err := json.Unmarshal(row.Photos, &photos); err != nil {
+				return nil, fmt.Errorf("photos de carton invalides: %w", err)
+			}
+		}
+		boxes = append(boxes, models.PreRegistrationCatalogueBox{
+			PreRegistrationBox: models.PreRegistrationBox{
+				ID: row.ID, CaseID: row.CaseID, Code: row.Code, Quantity: row.Quantity, Formes: formes,
+				Marques: []string(row.Marques), Couleurs: []string(row.Couleurs), Matieres: []string(row.Matieres), Photos: photos,
+				Gamme: row.Gamme, Type: row.Type, Prix: row.Prix, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+			},
+			CaseCode: row.CaseCode, CaseCouleur: row.CaseCouleur, CaseGenre: row.CaseGenre,
+		})
+	}
+	return boxes, nil
+}
+
 func (r *PreRegistrationRepository) GetShipmentDataByCommandID(commandID int64) (*models.ShipmentData, error) {
 	cases := make([]models.PreRegistrationCase, 0)
 	err := r.db.Select(&cases, `

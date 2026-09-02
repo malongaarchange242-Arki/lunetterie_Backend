@@ -52,6 +52,13 @@ type PreRegistrationBox struct {
 	UpdatedAt time.Time              `db:"updated_at" json:"updated_at"`
 }
 
+type PreRegistrationCatalogueBox struct {
+	PreRegistrationBox
+	CaseCode    string `json:"valise_code"`
+	CaseCouleur string `json:"valise_couleur"`
+	CaseGenre   string `json:"valise_genre"`
+}
+
 type PreRegistrationBoxRequest struct {
 	Code        string                 `json:"code"`
 	Quantity    int                    `json:"qty"`

@@ -32,6 +32,15 @@ func (h *PreRegistrationHandler) ListCases(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"cases": cases})
 }
 
+func (h *PreRegistrationHandler) ListCatalogueBoxes(c *gin.Context) {
+	boxes, err := h.repo.ListCatalogueBoxes()
+	if err != nil {
+		shared.InternalError(c, "Impossible de récupérer les cartons du catalogue: "+err.Error())
+		return
+	}
+	shared.Success(c, http.StatusOK, gin.H{"boxes": boxes})
+}
+
 func (h *PreRegistrationHandler) CreateCase(c *gin.Context) {
 	var req models.PreRegistrationCaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Couleur) == "" || req.Montures < 1 {
