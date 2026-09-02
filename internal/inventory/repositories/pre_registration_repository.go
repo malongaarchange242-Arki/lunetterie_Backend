@@ -139,10 +139,15 @@ func (r *PreRegistrationRepository) CreateBox(caseID int64, input models.PreRegi
 			type_lunette = EXCLUDED.type_lunette,
 			prix = EXCLUDED.prix,
 			updated_at = NOW()
+		WHERE pre_registration_boxes.case_id = EXCLUDED.case_id
 		RETURNING id, created_at, updated_at`,
 		caseID, input.Code, input.Quantity, formes, pq.Array(input.Marques), pq.Array(input.Couleurs),
 		pq.Array(input.Matieres), photos, input.Gamme, input.Type, input.Prix,
 	).Scan(&input.ID, &input.CreatedAt, &input.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("code carton deja utilise par une autre valise")
+	}
+	return err
 }
 
 func (r *PreRegistrationRepository) listBoxes(caseID int64) ([]models.PreRegistrationBox, error) {
