@@ -8,6 +8,18 @@
 -- À adapter si vous voulez une autre ville / autre email.
 -- =============================================================
 
+-- L'interface de connexion associe la 3e position de la molette à l'ID 6.
+-- Certaines bases existantes ne contiennent pas encore ce rôle.
+INSERT INTO roles (id, name, description)
+SELECT 6, 'RESPONSABLE_STATION', 'Responsable de station'
+WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'RESPONSABLE_STATION')
+    AND NOT EXISTS (SELECT 1 FROM roles WHERE id = 6);
+
+SELECT setval(
+        pg_get_serial_sequence('roles', 'id'),
+        GREATEST((SELECT COALESCE(MAX(id), 1) FROM roles), 1)
+);
+
 INSERT INTO users (
     first_name,
     last_name,
@@ -41,6 +53,20 @@ WHERE r.name = 'RESPONSABLE_STATION'
   AND NOT EXISTS (
       SELECT 1 FROM users u WHERE lower(trim(u.email)) = lower(trim('responsable.magasin@lunetterie.local'))
   );
+
+-- Répare également un compte déjà créé avec un mauvais rôle, une mauvaise
+-- station ou un ancien code de connexion.
+UPDATE users u
+SET role_id = r.id,
+        station_id = s.id,
+        is_active = true,
+        password_hash = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36CHqV36',
+        password_hash_deprecated = NULL,
+        updated_at = NOW()
+FROM roles r
+JOIN stations s ON s.name = 'Station Pointe-Noire'
+WHERE r.name = 'RESPONSABLE_STATION'
+    AND lower(trim(u.email)) = lower(trim('responsable.magasin@lunetterie.local'));
 
 SELECT
     u.id,

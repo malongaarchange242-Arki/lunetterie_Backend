@@ -1,0 +1,2 @@
+-- Les codes physiques qualifies ne sont pas reconvertis automatiquement : plusieurs valises
+-- peuvent partager le meme code CTN et un rollback pourrait recreer une collision.

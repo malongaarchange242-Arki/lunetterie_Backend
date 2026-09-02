@@ -128,6 +128,10 @@ func nextPreRegistrationBoxCode(sequence int64) string {
 	return fmt.Sprintf("CTN-%04d", sequence)
 }
 
+func preRegistrationLocationCode(caseCode, boxCode string) string {
+	return strings.TrimSpace(caseCode) + "-" + strings.TrimSpace(boxCode)
+}
+
 func (s *AllocationService) createNextPreRegistrationCarton(
 	lookupStationID int64,
 	valise *models.StorageLocation,
@@ -155,6 +159,7 @@ func (s *AllocationService) createNextPreRegistrationCarton(
 		return nil, fmt.Errorf("impossible de générer le code du carton suivant: %w", err)
 	}
 	newCode := nextPreRegistrationBoxCode(sequence)
+	locationCode := preRegistrationLocationCode(carton.CaseCode, newCode)
 
 	var newBoxID int64
 	if err := s.db.Get(&newBoxID, `
@@ -190,7 +195,7 @@ func (s *AllocationService) createNextPreRegistrationCarton(
 		RETURNING id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at`,
 		lookupStationID,
 		valise.ID,
-		newCode,
+		locationCode,
 		"Carton "+newCode,
 		carton.Quantity,
 	); err != nil {
@@ -274,6 +279,7 @@ func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 	}
 
 	var location models.StorageLocation
+	locationCode := preRegistrationLocationCode(carton.CaseCode, carton.BoxCode)
 	if err := s.db.Get(&location, `
 		INSERT INTO storage_locations (station_id, parent_location_id, zone, code, name, type, barcode, capacity, status)
 		VALUES ($1, $2, 'STOCK', $3, $4, 'CARTON', $3, $5, 'LIBRE')
@@ -283,7 +289,7 @@ func (s *AllocationService) FindOrCreatePreRegistrationCartonLocation(
 			barcode = COALESCE(storage_locations.barcode, EXCLUDED.barcode),
 			capacity = EXCLUDED.capacity
 		RETURNING id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at`,
-		lookupStationID, valise.ID, carton.BoxCode, "Carton "+carton.BoxCode, carton.Quantity); err != nil {
+		lookupStationID, valise.ID, locationCode, "Carton "+carton.BoxCode, carton.Quantity); err != nil {
 		return nil, fmt.Errorf("impossible de preparer le carton %s: %w", carton.BoxCode, err)
 	}
 
