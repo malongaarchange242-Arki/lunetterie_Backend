@@ -228,6 +228,10 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 	if list.CreatedBy != nil && *list.CreatedBy > 0 {
 		origin = "admin"
 	}
+	status := mapValidationStatus(list.Status)
+	if origin == "admin" && status == "attente" {
+		status = "valide"
+	}
 
 	return gin.H{
 		"id":      list.ID,
@@ -243,7 +247,7 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 		"date":       date,
 		"motif":      fmt.Sprintf("Liste %s vers %s", list.SessionCode, list.City),
 		"besoin":     list.ItemCount,
-		"statut":     mapValidationStatus(list.Status),
+		"statut":     status,
 		"uids":       uids,
 		"items":      itemPayload,
 		"cartonCode": "",
