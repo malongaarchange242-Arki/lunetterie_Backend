@@ -94,23 +94,12 @@ func (r *PreRegistrationRepository) NextCaseCode() (string, error) {
 	return fmt.Sprintf("VAL-%03d", sequence), nil
 }
 
-func (r *PreRegistrationRepository) NextBoxCode() (string, error) {
+func (r *PreRegistrationRepository) NextBoxCode(caseID int64) (string, error) {
 	var sequence int64
-	if _, err := r.db.Exec(`CREATE SEQUENCE IF NOT EXISTS carton_code_seq START WITH 1`); err != nil {
-		return "", err
-	}
-	if _, err := r.db.Exec(`
-		SELECT setval(
-			'carton_code_seq',
-			GREATEST(
-				COALESCE((SELECT last_value FROM carton_code_seq), 1),
-				COALESCE((SELECT MAX((regexp_match(code, '^CTN-0*([0-9]+)$'))[1]::BIGINT) FROM pre_registration_boxes), 0)
-			),
-			true
-		)`); err != nil {
-		return "", err
-	}
-	if err := r.db.Get(&sequence, `SELECT nextval('carton_code_seq')`); err != nil {
+	if err := r.db.Get(&sequence, `
+		SELECT COALESCE(MAX((regexp_match(code, '^CTN-0*([0-9]+)$'))[1]::BIGINT), 0) + 1
+		FROM pre_registration_boxes
+		WHERE case_id = $1`, caseID); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("CTN-%04d", sequence), nil
@@ -145,8 +134,7 @@ func (r *PreRegistrationRepository) CreateBox(caseID int64, input models.PreRegi
 		INSERT INTO pre_registration_boxes
 			(case_id, code, quantity, formes, marques, couleurs, matieres, photos, gamme, type_lunette, prix)
 		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10, $11)
-		ON CONFLICT (code) DO UPDATE SET
-			case_id = EXCLUDED.case_id,
+		ON CONFLICT (case_id, code) DO UPDATE SET
 			quantity = EXCLUDED.quantity,
 			formes = EXCLUDED.formes,
 			marques = EXCLUDED.marques,
@@ -162,9 +150,6 @@ func (r *PreRegistrationRepository) CreateBox(caseID int64, input models.PreRegi
 		caseID, input.Code, input.Quantity, formes, pq.Array(input.Marques), pq.Array(input.Couleurs),
 		pq.Array(input.Matieres), photos, input.Gamme, input.Type, input.Prix,
 	).Scan(&input.ID, &input.CreatedAt, &input.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("code carton deja utilise par une autre valise")
-	}
 	return err
 }
 

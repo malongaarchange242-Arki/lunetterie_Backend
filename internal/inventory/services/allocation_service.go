@@ -148,7 +148,10 @@ func (s *AllocationService) createNextPreRegistrationCarton(
 	},
 ) (*models.StorageLocation, error) {
 	var sequence int64
-	if err := s.db.Get(&sequence, `SELECT nextval('carton_code_seq')`); err != nil {
+	if err := s.db.Get(&sequence, `
+		SELECT COALESCE(MAX((regexp_match(code, '^CTN-0*([0-9]+)$'))[1]::BIGINT), 0) + 1
+		FROM pre_registration_boxes
+		WHERE case_id = $1`, carton.CaseID); err != nil {
 		return nil, fmt.Errorf("impossible de générer le code du carton suivant: %w", err)
 	}
 	newCode := nextPreRegistrationBoxCode(sequence)
@@ -445,8 +448,9 @@ func (s *AllocationService) findOrCreateLocation(
 // Il crée d'abord une VALISE si nécessaire, puis y ajoute un CARTON.
 //
 // Hiérarchie :
-//   VALISE (code: VAL-XXXXX)
-//     └─ CARTON (code: CTN-XXXXX, capacity: par défaut 50)
+//
+//	VALISE (code: VAL-XXXXX)
+//	  └─ CARTON (code: CTN-XXXXX, capacity: par défaut 50)
 func (s *AllocationService) createStockCarton(stationID int64) (*models.StorageLocation, error) {
 	// Résoudre la station de stockage
 	storageStationID, err := s.resolveStorageStationID(stationID)

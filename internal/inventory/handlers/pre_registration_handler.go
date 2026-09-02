@@ -90,7 +90,7 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 		Prix:     req.Prix,
 	}
 	if strings.TrimSpace(item.Code) == "" {
-		boxCode, err := h.repo.NextBoxCode()
+		boxCode, err := h.repo.NextBoxCode(caseID)
 		if err != nil {
 			shared.InternalError(c, "Impossible de generer le code carton: "+err.Error())
 			return
