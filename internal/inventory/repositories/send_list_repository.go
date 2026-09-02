@@ -389,9 +389,15 @@ func (r *SendListRepository) Create(list *models.SendList, items []models.SendLi
 	}
 
 	if len(items) > 0 {
+		hasItemDetails := r.hasSendListItemDetailColumns()
 		line := `
             INSERT INTO send_list_items (list_id, glass_id, barcode, reference, brand, shape, color, location_code)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+		if !hasItemDetails {
+			line = `
+            INSERT INTO send_list_items (list_id, glass_id, barcode, reference, brand, location_code)
+            VALUES ($1, $2, $3, $4, $5, $6)`
+		}
 		// Réserve la monture dans la même transaction que la ligne qui la désigne : la liste
 		// et l'état des montures qu'elle contient ne doivent jamais diverger. Restreint à
 		// EN_STOCK_GENERAL par précaution — une monture déjà réservée ou partie ailleurs entre
@@ -400,10 +406,18 @@ func (r *SendListRepository) Create(list *models.SendList, items []models.SendLi
             UPDATE glasses SET status = 'RESERVEE_ENVOI', updated_at = NOW()
             WHERE id = $1 AND status = 'EN_STOCK_GENERAL'`
 		for _, item := range items {
-			if _, err := tx.Exec(line, list.ID, item.GlassID,
-				nullIfEmpty(item.Barcode), nullIfEmpty(item.Reference),
-				nullIfEmpty(item.Brand), nullIfEmpty(item.Shape), nullIfEmpty(item.Color),
-				nullIfEmpty(item.LocationCode)); err != nil {
+			var err error
+			if hasItemDetails {
+				_, err = tx.Exec(line, list.ID, item.GlassID,
+					nullIfEmpty(item.Barcode), nullIfEmpty(item.Reference),
+					nullIfEmpty(item.Brand), nullIfEmpty(item.Shape), nullIfEmpty(item.Color),
+					nullIfEmpty(item.LocationCode))
+			} else {
+				_, err = tx.Exec(line, list.ID, item.GlassID,
+					nullIfEmpty(item.Barcode), nullIfEmpty(item.Reference),
+					nullIfEmpty(item.Brand), nullIfEmpty(item.LocationCode))
+			}
+			if err != nil {
 				return fmt.Errorf("impossible d'enregistrer une ligne de la liste: %w", err)
 			}
 			if item.GlassID != nil {
@@ -433,6 +447,17 @@ func nullIfEmpty(value string) interface{} {
 		return nil
 	}
 	return value
+}
+
+func (r *SendListRepository) hasSendListItemDetailColumns() bool {
+	var count int
+	err := r.db.Get(&count, `
+        SELECT COUNT(*)
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'send_list_items'
+          AND column_name IN ('shape', 'color')`)
+	return err != nil || count == 2
 }
 
 // List renvoie les listes, filtrées par statut si demandé, les plus récentes d'abord.

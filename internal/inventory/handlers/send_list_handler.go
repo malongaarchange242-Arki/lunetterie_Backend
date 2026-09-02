@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -127,6 +128,7 @@ func (h *SendListHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.repo.Create(list, items); err != nil {
+		log.Printf("send-list create failed: %v", err)
 		shared.InternalError(c, "Erreur lors de l'enregistrement de la liste")
 		return
 	}
@@ -153,10 +155,12 @@ func (h *SendListHandler) List(c *gin.Context) {
 
 func mapValidationStatus(status string) string {
 	switch strings.ToUpper(strings.TrimSpace(status)) {
-	case "NOUVELLE", "VUE":
+	case "NOUVELLE":
 		return "attente"
-	case "TRAITEE":
+	case "VUE":
 		return "valide"
+	case "TRAITEE":
+		return "expediee"
 	case "ANNULEE":
 		return "refuse"
 	default:
@@ -220,6 +224,11 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 	if !list.CreatedAt.IsZero() {
 		date = list.CreatedAt.Format("02/01/2006")
 	}
+	origin := "auto"
+	if list.CreatedBy != nil && *list.CreatedBy > 0 {
+		origin = "admin"
+	}
+
 	return gin.H{
 		"id":      list.ID,
 		"ref":     list.SessionCode,
@@ -230,7 +239,7 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 			}
 			return "Stock général"
 		}(),
-		"origine":    "auto",
+		"origine":    origin,
 		"date":       date,
 		"motif":      fmt.Sprintf("Liste %s vers %s", list.SessionCode, list.City),
 		"besoin":     list.ItemCount,
@@ -265,7 +274,7 @@ func (h *SendListHandler) ListValidations(c *gin.Context) {
 	if status == "attente" {
 		backendStatus = "NOUVELLE"
 	} else if status == "valide" {
-		backendStatus = "TRAITEE"
+		backendStatus = "VUE"
 	} else if status == "refuse" {
 		backendStatus = "ANNULEE"
 	}

@@ -422,6 +422,9 @@ func presentoirLocationCode(seq int) string {
 //
 // Pour STOCK, les emplacements sont centralisés dans le Stock Général.
 // Pour PRESENTOIR et LABORATOIRE, ils restent propres à la station.
+//
+// Si aucun emplacement libre n'existe en STOCK, crée automatiquement un nouveau
+// CARTON dans une VALISE (créant la VALISE si nécessaire).
 func (s *AllocationService) findOrCreateLocation(
 	stationID int64,
 	zone models.ZoneType,
@@ -429,10 +432,123 @@ func (s *AllocationService) findOrCreateLocation(
 	if location, err := s.FindFreeLocation(stationID, zone); err == nil {
 		return location, nil
 	}
+
 	if zone == models.ZoneStock {
-		return nil, fmt.Errorf("aucun carton disponible : créez d'abord un carton dans une valise")
+		log.Printf("📦 Pas de carton libre en STOCK, création automatique pour station %d...", stationID)
+		return s.createStockCarton(stationID)
 	}
+
 	return nil, fmt.Errorf("aucun emplacement disponible pour la zone %s", zone)
+}
+
+// createStockCarton crée automatiquement un nouveau CARTON en zone STOCK.
+// Il crée d'abord une VALISE si nécessaire, puis y ajoute un CARTON.
+//
+// Hiérarchie :
+//   VALISE (code: VAL-XXXXX)
+//     └─ CARTON (code: CTN-XXXXX, capacity: par défaut 50)
+func (s *AllocationService) createStockCarton(stationID int64) (*models.StorageLocation, error) {
+	// Résoudre la station de stockage
+	storageStationID, err := s.resolveStorageStationID(stationID)
+	if err != nil {
+		return nil, fmt.Errorf("impossible de trouver la station de stockage: %w", err)
+	}
+
+	log.Printf("📦 Résolu station stockage: %d pour station demandée: %d", storageStationID, stationID)
+
+	// Trouver ou créer une VALISE
+	valise, err := s.findOrCreateValise(storageStationID)
+	if err != nil {
+		return nil, fmt.Errorf("impossible de trouver/créer une valise: %w", err)
+	}
+
+	log.Printf("📦 Valise trouvée/créée: %s (id=%d)", valise.Code, valise.ID)
+
+	// Générer un code unique pour le carton
+	var cartonSeq int64
+	if err := s.db.Get(&cartonSeq, `SELECT nextval('carton_code_seq')`); err != nil {
+		return nil, fmt.Errorf("impossible de générer la séquence carton: %w", err)
+	}
+
+	cartonCode := fmt.Sprintf("CTN-%05d", cartonSeq)
+	cartonName := fmt.Sprintf("Carton %s", cartonCode)
+
+	log.Printf("📦 Création carton: %s (capacity=50)", cartonCode)
+
+	// Créer le CARTON en base
+	var carton models.StorageLocation
+	err = s.db.Get(&carton, `
+		INSERT INTO storage_locations (
+			station_id, parent_location_id, zone, code, name, type, capacity, status
+		) VALUES (
+			$1, $2, 'STOCK', $3, $4, 'CARTON', 50, 'LIBRE'
+		)
+		ON CONFLICT (station_id, zone, code) DO UPDATE SET
+			status = EXCLUDED.status,
+			parent_location_id = EXCLUDED.parent_location_id
+		RETURNING id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at
+	`, storageStationID, valise.ID, cartonCode, cartonName)
+
+	if err != nil {
+		return nil, fmt.Errorf("impossible de créer le carton %s: %w", cartonCode, err)
+	}
+
+	log.Printf("✅ Carton créé automatiquement: %s (id=%d, parent_valise=%d)", carton.Code, carton.ID, valise.ID)
+
+	return &carton, nil
+}
+
+// findOrCreateValise trouve ou crée une VALISE en zone STOCK pour la station de stockage.
+func (s *AllocationService) findOrCreateValise(storageStationID int64) (*models.StorageLocation, error) {
+	// D'abord, chercher une VALISE existante qui n'est pas pleine
+	// Une VALISE peut contenir plusieurs CARTONs, pas de limite stricte
+	var existing models.StorageLocation
+	err := s.db.Get(&existing, `
+		SELECT id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at
+		FROM storage_locations
+		WHERE station_id = $1
+		  AND zone = 'STOCK'
+		  AND type = 'VALISE'
+		  AND status = 'LIBRE'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, storageStationID)
+
+	if err == nil {
+		log.Printf("♻️  Valise existante trouvée: %s (id=%d)", existing.Code, existing.ID)
+		return &existing, nil
+	}
+
+	// Pas de VALISE libre, en créer une nouvelle
+	log.Println("📦 Création d'une nouvelle VALISE...")
+
+	var valiseSeq int64
+	if err := s.db.Get(&valiseSeq, `SELECT nextval('valise_code_seq')`); err != nil {
+		return nil, fmt.Errorf("impossible de générer la séquence valise: %w", err)
+	}
+
+	valiseCode := fmt.Sprintf("VAL-%05d", valiseSeq)
+	aliseName := fmt.Sprintf("Valise %s", valiseCode)
+
+	var newValise models.StorageLocation
+	err = s.db.Get(&newValise, `
+		INSERT INTO storage_locations (
+			station_id, parent_location_id, zone, code, name, type, capacity, status
+		) VALUES (
+			$1, NULL, 'STOCK', $2, $3, 'VALISE', NULL, 'LIBRE'
+		)
+		ON CONFLICT (station_id, zone, code) DO UPDATE SET
+			status = EXCLUDED.status
+		RETURNING id, station_id, parent_location_id, zone, code, name, barcode, type, capacity, status, created_at
+	`, storageStationID, valiseCode, aliseName)
+
+	if err != nil {
+		return nil, fmt.Errorf("impossible de créer la valise %s: %w", valiseCode, err)
+	}
+
+	log.Printf("✅ Valise créée automatiquement: %s (id=%d)", newValise.Code, newValise.ID)
+
+	return &newValise, nil
 }
 
 // FindOrCreatePresentoirLocation trouve un emplacement libre
@@ -453,10 +569,13 @@ func (s *AllocationService) FindOrCreatePresentoirLocation(
 //
 // Les emplacements STOCK sont physiquement rattachés au
 // Stock Général de la ville.
+//
+// Si aucun emplacement libre n'existe, crée automatiquement un nouveau CARTON
+// dans une VALISE (créant la VALISE si nécessaire).
 func (s *AllocationService) FindOrCreateStockLocation(
 	stationID int64,
 ) (*models.StorageLocation, error) {
-	return s.FindFreeLocation(stationID, models.ZoneStock)
+	return s.findOrCreateLocation(stationID, models.ZoneStock)
 }
 
 // FreeLocation libère un emplacement.

@@ -60,6 +60,22 @@ func TestToValidationPayloadKeepsRealItemAttributes(t *testing.T) {
 	}
 }
 
+func TestToValidationPayloadTagsAdminCreatedListsAsAdmin(t *testing.T) {
+	userID := int64(42)
+	list := models.SendList{
+		ID:          12,
+		SessionCode: "STK-2026-0002",
+		City:        "Pointe-Noire",
+		CreatedBy:   &userID,
+		CreatedAt:   time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+	}
+
+	payload := toValidationPayload(list, nil)
+	if got := payload["origine"]; got != "admin" {
+		t.Fatalf("expected origine %q for admin-created list, got %#v", "admin", got)
+	}
+}
+
 func TestCreateAcceptsGlassIDWithoutBarcode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &stubSendListRepo{nextCode: "STK-2026-0001"}
@@ -85,7 +101,7 @@ func TestCreateAcceptsGlassIDWithoutBarcode(t *testing.T) {
 }
 
 type stubSendListRepo struct {
-	nextCode    string
+	nextCode     string
 	createdItems []models.SendListItemRequest
 }
 
@@ -109,7 +125,9 @@ func (s *stubSendListRepo) SplitAvailableBarcodes(barcodes []string) ([]string, 
 
 func (s *stubSendListRepo) List(status string) ([]models.SendList, error) { return nil, nil }
 
-func (s *stubSendListRepo) ListItems(listID int64, query string) ([]models.SendListItem, error) { return nil, nil }
+func (s *stubSendListRepo) ListItems(listID int64, query string) ([]models.SendListItem, error) {
+	return nil, nil
+}
 
 func (s *stubSendListRepo) Cancel(id int64) (*models.SendList, error) { return nil, nil }
 

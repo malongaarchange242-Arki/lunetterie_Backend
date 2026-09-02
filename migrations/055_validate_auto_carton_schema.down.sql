@@ -1,0 +1,2 @@
+-- Migration DOWN: Aucune action, juste validation de schéma
+-- Les séquences et tables existent déjà et restent inchangées.
