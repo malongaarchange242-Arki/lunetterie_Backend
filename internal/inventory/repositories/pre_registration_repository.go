@@ -84,7 +84,11 @@ func (r *PreRegistrationRepository) GetShipmentDataByCommandID(commandID int64) 
 
 func (r *PreRegistrationRepository) NextCaseCode() (string, error) {
 	var sequence int64
-	if err := r.db.Get(&sequence, `SELECT nextval('valise_code_seq')`); err != nil {
+	if _, err := r.db.Exec(`CREATE SEQUENCE IF NOT EXISTS valise_code_seq START WITH 1`); err != nil {
+		return "", err
+	}
+	if err := r.db.Get(&sequence, `
+		SELECT nextval('valise_code_seq')`); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("VAL-%03d", sequence), nil
@@ -92,6 +96,20 @@ func (r *PreRegistrationRepository) NextCaseCode() (string, error) {
 
 func (r *PreRegistrationRepository) NextBoxCode() (string, error) {
 	var sequence int64
+	if _, err := r.db.Exec(`CREATE SEQUENCE IF NOT EXISTS carton_code_seq START WITH 1`); err != nil {
+		return "", err
+	}
+	if _, err := r.db.Exec(`
+		SELECT setval(
+			'carton_code_seq',
+			GREATEST(
+				COALESCE((SELECT last_value FROM carton_code_seq), 1),
+				COALESCE((SELECT MAX((regexp_match(code, '^CTN-0*([0-9]+)$'))[1]::BIGINT) FROM pre_registration_boxes), 0)
+			),
+			true
+		)`); err != nil {
+		return "", err
+	}
 	if err := r.db.Get(&sequence, `SELECT nextval('carton_code_seq')`); err != nil {
 		return "", err
 	}
@@ -123,7 +141,7 @@ func (r *PreRegistrationRepository) CreateBox(caseID int64, input models.PreRegi
 	if err != nil {
 		return fmt.Errorf("photos invalides: %w", err)
 	}
-	return r.db.QueryRowx(`
+	err = r.db.QueryRowx(`
 		INSERT INTO pre_registration_boxes
 			(case_id, code, quantity, formes, marques, couleurs, matieres, photos, gamme, type_lunette, prix)
 		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10, $11)

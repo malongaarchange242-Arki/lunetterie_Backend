@@ -32,28 +32,19 @@ func (h *PreRegistrationHandler) ListCases(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"cases": cases})
 }
 
-func mustGenerateCaseCode(repo *repositories.PreRegistrationRepository) string {
-	code, err := repo.NextCaseCode()
-	if err != nil {
-		panic(err)
-	}
-	return code
-}
-func mustGenerateBoxCode(repo *repositories.PreRegistrationRepository) string {
-	code, err := repo.NextBoxCode()
-	if err != nil {
-		panic(err)
-	}
-	return code
-}
 func (h *PreRegistrationHandler) CreateCase(c *gin.Context) {
 	var req models.PreRegistrationCaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Couleur) == "" || req.Montures < 1 {
 		shared.BadRequest(c, "couleur, gamme, genre et montures valides sont requis")
 		return
 	}
+	caseCode, err := h.repo.NextCaseCode()
+	if err != nil {
+		shared.InternalError(c, "Impossible de generer le code valise: "+err.Error())
+		return
+	}
 	item := models.PreRegistrationCase{
-		Code: mustGenerateCaseCode(h.repo), Couleur: strings.TrimSpace(req.Couleur),
+		Code: caseCode, Couleur: strings.TrimSpace(req.Couleur),
 		Hex: strings.TrimSpace(req.Hex), Gamme: strings.TrimSpace(req.Gamme), Genre: strings.TrimSpace(req.Genre), Montures: req.Montures,
 	}
 	if err := h.repo.CreateCase(c.Param("code"), item); err != nil {
@@ -75,8 +66,15 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 		return
 	}
 	var req models.PreRegistrationBoxRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Quantity < 1 || len(req.Formes) == 0 {
-		shared.BadRequest(c, "code, quantité et formes valides sont requis")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.BadRequest(c, "payload carton invalide")
+		return
+	}
+	if req.Quantity < 1 && req.QuantityAlt > 0 {
+		req.Quantity = req.QuantityAlt
+	}
+	if req.Quantity < 1 || len(req.Formes) == 0 {
+		shared.BadRequest(c, "quantite et formes valides sont requises")
 		return
 	}
 	item := models.PreRegistrationBox{
@@ -92,7 +90,12 @@ func (h *PreRegistrationHandler) CreateBox(c *gin.Context) {
 		Prix:     req.Prix,
 	}
 	if strings.TrimSpace(item.Code) == "" {
-		item.Code = mustGenerateBoxCode(h.repo)
+		boxCode, err := h.repo.NextBoxCode()
+		if err != nil {
+			shared.InternalError(c, "Impossible de generer le code carton: "+err.Error())
+			return
+		}
+		item.Code = boxCode
 	}
 	if err := h.repo.CreateBox(caseID, item); err != nil {
 		shared.InternalError(c, "Impossible de créer le carton: "+err.Error())
