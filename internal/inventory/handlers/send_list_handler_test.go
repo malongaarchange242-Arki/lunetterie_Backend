@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,5 +59,62 @@ func TestToValidationPayloadKeepsRealItemAttributes(t *testing.T) {
 		t.Fatalf("expected emplacement %q, got %#v", location, got)
 	}
 }
+
+func TestCreateAcceptsGlassIDWithoutBarcode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &stubSendListRepo{nextCode: "STK-2026-0001"}
+	handler := NewSendListHandler(repo, nil)
+
+	body := `{"city":"Pointe-Noire","items":[{"glass_id":42,"reference":"REF-42","brand":"Pacino","shape":"Vue","color":"Noir","location_code":"A-01"}]}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/inventory/send-lists", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.Create(c)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusCreated, w.Code, w.Body.String())
+	}
+	if len(repo.createdItems) != 1 {
+		t.Fatalf("expected one item created, got %d", len(repo.createdItems))
+	}
+	if repo.createdItems[0].GlassID == nil || *repo.createdItems[0].GlassID != 42 {
+		t.Fatalf("expected glass_id 42 to be kept, got %#v", repo.createdItems[0].GlassID)
+	}
+}
+
+type stubSendListRepo struct {
+	nextCode    string
+	createdItems []models.SendListItemRequest
+}
+
+func (s *stubSendListRepo) Create(list *models.SendList, items []models.SendListItemRequest) error {
+	s.createdItems = append([]models.SendListItemRequest{}, items...)
+	list.ID = 101
+	list.Status = models.SendListStatusNouvelle
+	list.CreatedAt = time.Now()
+	list.UpdatedAt = time.Now()
+	return nil
+}
+
+func (s *stubSendListRepo) NextStockListCode() (string, error) { return s.nextCode, nil }
+
+func (s *stubSendListRepo) SplitAvailableBarcodes(barcodes []string) ([]string, map[string]string, error) {
+	if len(barcodes) == 0 {
+		return []string{}, map[string]string{"": "no barcode"}, nil
+	}
+	return barcodes, map[string]string{}, nil
+}
+
+func (s *stubSendListRepo) List(status string) ([]models.SendList, error) { return nil, nil }
+
+func (s *stubSendListRepo) ListItems(listID int64, query string) ([]models.SendListItem, error) { return nil, nil }
+
+func (s *stubSendListRepo) Cancel(id int64) (*models.SendList, error) { return nil, nil }
+
+func (s *stubSendListRepo) MarkSeen(ids []int64) (int64, error) { return 0, nil }
+
+func (s *stubSendListRepo) MarkProcessed(ids []int64) (int64, error) { return 0, nil }
 
 func strPtr(s string) *string { return &s }

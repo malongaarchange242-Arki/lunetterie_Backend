@@ -79,29 +79,36 @@ func (h *SendListHandler) Create(c *gin.Context) {
 	// à dire de plus.
 	if fromStock {
 		barcodes := make([]string, 0, len(req.Items))
+		filtered := make([]models.SendListItemRequest, 0, len(req.Items))
 		for _, item := range req.Items {
+			if item.GlassID != nil && strings.TrimSpace(item.Barcode) == "" {
+				filtered = append(filtered, item)
+				continue
+			}
 			if code := strings.TrimSpace(item.Barcode); code != "" {
 				barcodes = append(barcodes, code)
 			}
 		}
 
-		available, unavailable, err := h.repo.SplitAvailableBarcodes(barcodes)
-		if err != nil {
-			shared.InternalError(c, err.Error())
-			return
-		}
-		rejected = unavailable
+		if len(barcodes) > 0 {
+			available, unavailable, err := h.repo.SplitAvailableBarcodes(barcodes)
+			if err != nil {
+				shared.InternalError(c, err.Error())
+				return
+			}
+			rejected = unavailable
 
-		keep := make(map[string]bool, len(available))
-		for _, code := range available {
-			keep[code] = true
-		}
-		filtered := make([]models.SendListItemRequest, 0, len(available))
-		for _, item := range req.Items {
-			if keep[strings.TrimSpace(item.Barcode)] {
-				filtered = append(filtered, item)
+			keep := make(map[string]bool, len(available))
+			for _, code := range available {
+				keep[code] = true
+			}
+			for _, item := range req.Items {
+				if strings.TrimSpace(item.Barcode) != "" && keep[strings.TrimSpace(item.Barcode)] {
+					filtered = append(filtered, item)
+				}
 			}
 		}
+
 		items = filtered
 
 		// Tout est indisponible : on ne crée pas une liste vide que le magasinier ouvrirait
