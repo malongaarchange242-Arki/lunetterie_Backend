@@ -32,6 +32,7 @@ type SendListItem struct {
 	PhotoMontureURL *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
 	ValiseCode      *string   `db:"valise_code" json:"valise_code,omitempty"`
 	CartonCode      *string   `db:"carton_code" json:"carton_code,omitempty"`
+	PhotosJSON      *string   `db:"photos_json" json:"-"`
 	CreatedAt       time.Time `db:"created_at" json:"created_at"`
 }
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -215,6 +216,12 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 		if item.CartonCode != nil {
 			cartonCode = strings.TrimSpace(*item.CartonCode)
 		}
+		var photos interface{}
+		if item.PhotosJSON != nil && strings.TrimSpace(*item.PhotosJSON) != "" {
+			if err := json.Unmarshal([]byte(*item.PhotosJSON), &photos); err != nil {
+				photos = nil
+			}
+		}
 
 		itemPayload = append(itemPayload, gin.H{
 			"uid":               barcode,
@@ -232,6 +239,7 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 			"photo_monture_url": photoURL,
 			"valise_code":       valiseCode,
 			"carton_code":       cartonCode,
+			"photos":            photos,
 		})
 	}
 

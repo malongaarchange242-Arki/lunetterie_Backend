@@ -495,11 +495,12 @@ func (r *SendListRepository) ListItems(listID int64, query string) ([]models.Sen
 	       g.photo_monture_url,
 	       source.valise_code,
 	       source.carton_code,
+	       source.photos_json,
 	       sli.created_at
 	FROM send_list_items sli
 	LEFT JOIN glasses g ON g.id = sli.glass_id
 	LEFT JOIN LATERAL (
-	       SELECT pc.code AS valise_code, pb.code AS carton_code
+	       SELECT pc.code AS valise_code, pb.code AS carton_code, pb.photos::text AS photos_json
 	       FROM pre_registration_cases pc
 	       LEFT JOIN pre_registration_boxes pb ON pb.case_id = pc.id
 	       WHERE pc.reception_command_id = g.reception_command_id
