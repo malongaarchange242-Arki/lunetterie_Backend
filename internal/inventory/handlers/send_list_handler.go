@@ -177,6 +177,14 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 		if item.Brand != nil {
 			brand = strings.TrimSpace(*item.Brand)
 		}
+		shape := ""
+		if item.Shape != nil {
+			shape = strings.TrimSpace(*item.Shape)
+		}
+		color := ""
+		if item.Color != nil {
+			color = strings.TrimSpace(*item.Color)
+		}
 		location := "—"
 		if item.LocationCode != nil {
 			location = strings.TrimSpace(*item.LocationCode)
@@ -192,6 +200,10 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 			"ref":           ref,
 			"brand":         brand,
 			"marque":        brand,
+			"shape":         shape,
+			"forme":         shape,
+			"color":         color,
+			"couleur":       color,
 			"location_code": location,
 			"emplacement":   location,
 		})

@@ -390,8 +390,8 @@ func (r *SendListRepository) Create(list *models.SendList, items []models.SendLi
 
 	if len(items) > 0 {
 		line := `
-            INSERT INTO send_list_items (list_id, glass_id, barcode, reference, brand, location_code)
-            VALUES ($1, $2, $3, $4, $5, $6)`
+            INSERT INTO send_list_items (list_id, glass_id, barcode, reference, brand, shape, color, location_code)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 		// Réserve la monture dans la même transaction que la ligne qui la désigne : la liste
 		// et l'état des montures qu'elle contient ne doivent jamais diverger. Restreint à
 		// EN_STOCK_GENERAL par précaution — une monture déjà réservée ou partie ailleurs entre
@@ -402,12 +402,21 @@ func (r *SendListRepository) Create(list *models.SendList, items []models.SendLi
 		for _, item := range items {
 			if _, err := tx.Exec(line, list.ID, item.GlassID,
 				nullIfEmpty(item.Barcode), nullIfEmpty(item.Reference),
-				nullIfEmpty(item.Brand), nullIfEmpty(item.LocationCode)); err != nil {
+				nullIfEmpty(item.Brand), nullIfEmpty(item.Shape), nullIfEmpty(item.Color),
+				nullIfEmpty(item.LocationCode)); err != nil {
 				return fmt.Errorf("impossible d'enregistrer une ligne de la liste: %w", err)
 			}
 			if item.GlassID != nil {
-				if _, err := tx.Exec(reserve, *item.GlassID); err != nil {
+				result, err := tx.Exec(reserve, *item.GlassID)
+				if err != nil {
 					return fmt.Errorf("impossible de réserver la monture #%d: %w", *item.GlassID, err)
+				}
+				reserved, err := result.RowsAffected()
+				if err != nil {
+					return fmt.Errorf("impossible de vérifier la réservation de la monture #%d: %w", *item.GlassID, err)
+				}
+				if reserved != 1 {
+					return fmt.Errorf("la monture #%d n'est plus disponible au stock général", *item.GlassID)
 				}
 			}
 		}
@@ -457,7 +466,7 @@ func (r *SendListRepository) GetByID(id int64) (*models.SendList, error) {
 func (r *SendListRepository) ListItems(listID int64, query string) ([]models.SendListItem, error) {
 	items := []models.SendListItem{}
 	baseQuery := `
-        SELECT id, list_id, glass_id, barcode, reference, brand, location_code, created_at
+        SELECT id, list_id, glass_id, barcode, reference, brand, shape, color, location_code, created_at
         FROM send_list_items
         WHERE list_id = $1`
 	args := []interface{}{listID}

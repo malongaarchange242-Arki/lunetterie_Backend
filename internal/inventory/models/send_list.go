@@ -26,6 +26,8 @@ type SendListItem struct {
 	Barcode      *string   `db:"barcode" json:"barcode,omitempty"`
 	Reference    *string   `db:"reference" json:"reference,omitempty"`
 	Brand        *string   `db:"brand" json:"brand,omitempty"`
+	Shape        *string   `db:"shape" json:"shape,omitempty"`
+	Color        *string   `db:"color" json:"color,omitempty"`
 	LocationCode *string   `db:"location_code" json:"location_code,omitempty"`
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
@@ -35,6 +37,8 @@ type SendListItemRequest struct {
 	Barcode      string `json:"barcode"`
 	Reference    string `json:"reference"`
 	Brand        string `json:"brand"`
+	Shape        string `json:"shape"`
+	Color        string `json:"color"`
 	LocationCode string `json:"location_code"`
 }
 
