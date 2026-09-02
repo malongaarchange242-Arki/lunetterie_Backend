@@ -20,16 +20,19 @@ type SendList struct {
 // SendListItem recopie les attributs de la monture au moment de l'envoi : la liste doit
 // rester lisible même si la monture bouge ou est supprimée ensuite.
 type SendListItem struct {
-	ID           int64     `db:"id" json:"id"`
-	ListID       int64     `db:"list_id" json:"list_id"`
-	GlassID      *int64    `db:"glass_id" json:"glass_id,omitempty"`
-	Barcode      *string   `db:"barcode" json:"barcode,omitempty"`
-	Reference    *string   `db:"reference" json:"reference,omitempty"`
-	Brand        *string   `db:"brand" json:"brand,omitempty"`
-	Shape        *string   `db:"shape" json:"shape,omitempty"`
-	Color        *string   `db:"color" json:"color,omitempty"`
-	LocationCode *string   `db:"location_code" json:"location_code,omitempty"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	ID              int64     `db:"id" json:"id"`
+	ListID          int64     `db:"list_id" json:"list_id"`
+	GlassID         *int64    `db:"glass_id" json:"glass_id,omitempty"`
+	Barcode         *string   `db:"barcode" json:"barcode,omitempty"`
+	Reference       *string   `db:"reference" json:"reference,omitempty"`
+	Brand           *string   `db:"brand" json:"brand,omitempty"`
+	Shape           *string   `db:"shape" json:"shape,omitempty"`
+	Color           *string   `db:"color" json:"color,omitempty"`
+	LocationCode    *string   `db:"location_code" json:"location_code,omitempty"`
+	PhotoMontureURL *string   `db:"photo_monture_url" json:"photo_monture_url,omitempty"`
+	ValiseCode      *string   `db:"valise_code" json:"valise_code,omitempty"`
+	CartonCode      *string   `db:"carton_code" json:"carton_code,omitempty"`
+	CreatedAt       time.Time `db:"created_at" json:"created_at"`
 }
 
 type SendListItemRequest struct {

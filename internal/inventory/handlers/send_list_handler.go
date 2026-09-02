@@ -203,20 +203,35 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 				location = "—"
 			}
 		}
+		photoURL := ""
+		if item.PhotoMontureURL != nil {
+			photoURL = strings.TrimSpace(*item.PhotoMontureURL)
+		}
+		valiseCode := ""
+		if item.ValiseCode != nil {
+			valiseCode = strings.TrimSpace(*item.ValiseCode)
+		}
+		cartonCode := ""
+		if item.CartonCode != nil {
+			cartonCode = strings.TrimSpace(*item.CartonCode)
+		}
 
 		itemPayload = append(itemPayload, gin.H{
-			"uid":           barcode,
-			"barcode":       barcode,
-			"reference":     ref,
-			"ref":           ref,
-			"brand":         brand,
-			"marque":        brand,
-			"shape":         shape,
-			"forme":         shape,
-			"color":         color,
-			"couleur":       color,
-			"location_code": location,
-			"emplacement":   location,
+			"uid":               barcode,
+			"barcode":           barcode,
+			"reference":         ref,
+			"ref":               ref,
+			"brand":             brand,
+			"marque":            brand,
+			"shape":             shape,
+			"forme":             shape,
+			"color":             color,
+			"couleur":           color,
+			"location_code":     location,
+			"emplacement":       location,
+			"photo_monture_url": photoURL,
+			"valise_code":       valiseCode,
+			"carton_code":       cartonCode,
 		})
 	}
 

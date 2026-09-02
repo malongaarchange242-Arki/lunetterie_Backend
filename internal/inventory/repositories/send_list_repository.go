@@ -491,9 +491,23 @@ func (r *SendListRepository) GetByID(id int64) (*models.SendList, error) {
 func (r *SendListRepository) ListItems(listID int64, query string) ([]models.SendListItem, error) {
 	items := []models.SendListItem{}
 	baseQuery := `
-        SELECT id, list_id, glass_id, barcode, reference, brand, shape, color, location_code, created_at
-        FROM send_list_items
-        WHERE list_id = $1`
+	SELECT sli.id, sli.list_id, sli.glass_id, sli.barcode, sli.reference, sli.brand, sli.shape, sli.color, sli.location_code,
+	       g.photo_monture_url,
+	       source.valise_code,
+	       source.carton_code,
+	       sli.created_at
+	FROM send_list_items sli
+	LEFT JOIN glasses g ON g.id = sli.glass_id
+	LEFT JOIN LATERAL (
+	       SELECT pc.code AS valise_code, pb.code AS carton_code
+	       FROM pre_registration_cases pc
+	       LEFT JOIN pre_registration_boxes pb ON pb.case_id = pc.id
+	       WHERE pc.reception_command_id = g.reception_command_id
+	         AND (pc.code = sli.location_code OR pb.code = sli.location_code OR sli.location_code IS NULL)
+	       ORDER BY (pc.code = sli.location_code) DESC, (pb.code = sli.location_code) DESC, pb.id
+	       LIMIT 1
+	) source ON TRUE
+		WHERE sli.list_id = $1`
 	args := []interface{}{listID}
 	if query != "" {
 		baseQuery += ` AND (LOWER(barcode) LIKE LOWER($2) OR LOWER(reference) LIKE LOWER($2))`
