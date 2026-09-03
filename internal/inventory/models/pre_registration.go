@@ -54,9 +54,20 @@ type PreRegistrationBox struct {
 
 type PreRegistrationCatalogueBox struct {
 	PreRegistrationBox
-	CaseCode    string `json:"valise_code"`
-	CaseCouleur string `json:"valise_couleur"`
-	CaseGenre   string `json:"valise_genre"`
+	CaseCode    string                          `json:"valise_code"`
+	CaseCouleur string                          `json:"valise_couleur"`
+	CaseGenre   string                          `json:"valise_genre"`
+	Montures    []PreRegistrationCatalogueGlass `json:"montures"`
+}
+
+type PreRegistrationCatalogueGlass struct {
+	ID        int64  `json:"id"`
+	Reference string `json:"reference"`
+	Barcode   string `json:"barcode"`
+	Marque    string `json:"marque"`
+	Couleur   string `json:"couleur"`
+	Forme     string `json:"forme"`
+	Matiere   string `json:"matiere"`
 }
 
 type PreRegistrationBoxRequest struct {

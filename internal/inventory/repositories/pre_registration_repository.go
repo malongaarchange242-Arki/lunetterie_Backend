@@ -72,13 +72,34 @@ func (r *PreRegistrationRepository) ListCatalogueBoxes() ([]models.PreRegistrati
 		CaseCode    string         `db:"case_code"`
 		CaseCouleur string         `db:"case_couleur"`
 		CaseGenre   string         `db:"case_genre"`
+		Montures    []byte         `db:"montures"`
 	}
 	err := r.db.Select(&rows, `
 		SELECT b.id, b.case_id, b.code, b.quantity, b.formes, b.marques, b.couleurs, b.matieres,
 		       b.photos, b.gamme, b.type_lunette, b.prix, b.created_at, b.updated_at,
-		       c.code AS case_code, c.couleur AS case_couleur, c.genre AS case_genre
+		       c.code AS case_code, c.couleur AS case_couleur, c.genre AS case_genre,
+		       COALESCE(jsonb_agg(jsonb_build_object(
+		           'id', g.id, 'reference', COALESCE(ga.reference, ''), 'barcode', g.barcode,
+		           'marque', COALESCE(ga.brand, ''), 'couleur', COALESCE(ga.color, ''),
+		           'forme', COALESCE(ga.shape, ''), 'matiere', COALESCE(ga.material, '')
+		       ) ORDER BY g.id) FILTER (WHERE g.id IS NOT NULL), '[]'::jsonb) AS montures
 		FROM pre_registration_boxes b
 		JOIN pre_registration_cases c ON c.id = b.case_id
+		LEFT JOIN storage_locations sl
+		  ON sl.type = 'CARTON'
+		 AND (sl.code = c.code || '-' || b.code OR (sl.code = b.code AND EXISTS (
+		     SELECT 1 FROM storage_locations parent_sl
+		     WHERE parent_sl.id = sl.parent_location_id AND parent_sl.code = c.code
+		 )))
+		LEFT JOIN glasses g ON g.location_id = sl.id
+		LEFT JOIN LATERAL (
+			SELECT ga.*
+			FROM glass_analysis ga
+			WHERE ga.id = g.analysis_id OR ga.glass_id = g.id
+			ORDER BY (ga.id = g.analysis_id) DESC, ga.created_at DESC, ga.id DESC
+			LIMIT 1
+		) ga ON TRUE
+		GROUP BY b.id, c.id
 		ORDER BY b.created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("impossible de lister les cartons du catalogue: %w", err)
@@ -97,6 +118,12 @@ func (r *PreRegistrationRepository) ListCatalogueBoxes() ([]models.PreRegistrati
 				return nil, fmt.Errorf("photos de carton invalides: %w", err)
 			}
 		}
+		montures := make([]models.PreRegistrationCatalogueGlass, 0)
+		if len(row.Montures) > 0 && string(row.Montures) != "null" {
+			if err := json.Unmarshal(row.Montures, &montures); err != nil {
+				return nil, fmt.Errorf("montures du carton invalides: %w", err)
+			}
+		}
 		boxes = append(boxes, models.PreRegistrationCatalogueBox{
 			PreRegistrationBox: models.PreRegistrationBox{
 				ID: row.ID, CaseID: row.CaseID, Code: row.Code, Quantity: row.Quantity, Formes: formes,
@@ -104,6 +131,7 @@ func (r *PreRegistrationRepository) ListCatalogueBoxes() ([]models.PreRegistrati
 				Gamme: row.Gamme, Type: row.Type, Prix: row.Prix, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 			},
 			CaseCode: row.CaseCode, CaseCouleur: row.CaseCouleur, CaseGenre: row.CaseGenre,
+			Montures: montures,
 		})
 	}
 	return boxes, nil
