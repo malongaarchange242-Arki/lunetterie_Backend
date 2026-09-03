@@ -117,6 +117,33 @@ func TestCreateAcceptsGlassIDWithoutBarcode(t *testing.T) {
 	}
 }
 
+func TestCreateAcceptsReferenceAndLocationWithoutBarcodeOrGlassID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &stubSendListRepo{nextCode: "STK-2026-0002"}
+	handler := NewSendListHandler(repo, nil)
+
+	body := `{"city":"Pointe-Noire","items":[{"reference":"REF-PRE-1","brand":"Pacino","shape":"Vue","color":"Noir","location_code":"VAL-001 / CTN-07"}]}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/inventory/send-lists", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.Create(c)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusCreated, w.Code, w.Body.String())
+	}
+	if len(repo.createdItems) != 1 {
+		t.Fatalf("expected one item created, got %d", len(repo.createdItems))
+	}
+	if repo.createdItems[0].Reference != "REF-PRE-1" {
+		t.Fatalf("expected reference to be kept, got %#v", repo.createdItems[0].Reference)
+	}
+	if repo.createdItems[0].LocationCode != "VAL-001 / CTN-07" {
+		t.Fatalf("expected location_code to be kept, got %#v", repo.createdItems[0].LocationCode)
+	}
+}
+
 type stubSendListRepo struct {
 	nextCode     string
 	createdItems []models.SendListItemRequest

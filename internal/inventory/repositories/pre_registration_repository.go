@@ -125,25 +125,25 @@ func matchesCatalogueFilters(box models.PreRegistrationCatalogueBox, filters mod
 
 func (r *PreRegistrationRepository) ListCatalogueBoxes(filters models.PreRegistrationCatalogueFilters) ([]models.PreRegistrationCatalogueBox, error) {
 	var rows []struct {
-		ID          int64          `db:"id"`
-		CaseID      int64          `db:"case_id"`
-		Code        string         `db:"code"`
-		Quantity    int            `db:"quantity"`
-		Formes      []byte         `db:"formes"`
-		Marques     pq.StringArray `db:"marques"`
-		Couleurs    pq.StringArray `db:"couleurs"`
-		Matieres    pq.StringArray `db:"matieres"`
-		Photos      []byte         `db:"photos"`
-		Gamme       string         `db:"gamme"`
-		Type        string         `db:"type_lunette"`
-		Prix        float64        `db:"prix"`
-		CreatedAt   time.Time      `db:"created_at"`
-		UpdatedAt   time.Time      `db:"updated_at"`
-		CaseCode    string         `db:"case_code"`
-		CaseCouleur string         `db:"case_couleur"`
-		CaseGenre   string         `db:"case_genre"`
-		CaseMontures int           `db:"case_montures"`
-		Montures    []byte         `db:"montures"`
+		ID           int64          `db:"id"`
+		CaseID       int64          `db:"case_id"`
+		Code         string         `db:"code"`
+		Quantity     int            `db:"quantity"`
+		Formes       []byte         `db:"formes"`
+		Marques      pq.StringArray `db:"marques"`
+		Couleurs     pq.StringArray `db:"couleurs"`
+		Matieres     pq.StringArray `db:"matieres"`
+		Photos       []byte         `db:"photos"`
+		Gamme        string         `db:"gamme"`
+		Type         string         `db:"type_lunette"`
+		Prix         float64        `db:"prix"`
+		CreatedAt    time.Time      `db:"created_at"`
+		UpdatedAt    time.Time      `db:"updated_at"`
+		CaseCode     string         `db:"case_code"`
+		CaseCouleur  string         `db:"case_couleur"`
+		CaseGenre    string         `db:"case_genre"`
+		CaseMontures int            `db:"case_montures"`
+		Montures     []byte         `db:"montures"`
 	}
 	err := r.db.Select(&rows, `
 		SELECT b.id, b.case_id, b.code, b.quantity, b.formes, b.marques, b.couleurs, b.matieres,

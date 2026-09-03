@@ -53,25 +53,25 @@ type PreRegistrationBox struct {
 }
 
 type PreRegistrationCatalogueBox struct {
-	ID          int64                           `json:"id"`
-	CaseID      int64                           `json:"case_id"`
-	Code        string                          `json:"code"`
-	Quantity    int                             `json:"quantity"`
-	Formes      map[string]int                  `json:"formes"`
-	Marques     []string                        `json:"marques"`
-	Couleurs    []string                        `json:"couleurs"`
-	Matieres    []string                        `json:"matieres"`
-	Photos      []PreRegistrationPhoto          `json:"photos"`
-	Gamme       string                          `json:"gamme"`
-	Type        string                          `json:"type"`
-	Prix        float64                         `json:"prix"`
-	CreatedAt   time.Time                       `json:"created_at"`
-	UpdatedAt   time.Time                       `json:"updated_at"`
-	CaseCode    string                          `json:"valise_code"`
-	CaseCouleur string                          `json:"valise_couleur"`
-	CaseGenre   string                          `json:"valise_genre"`
-	CaseMontures int                            `json:"valise_montures"`
-	Montures    []PreRegistrationCatalogueGlass `json:"montures"`
+	ID           int64                           `json:"id"`
+	CaseID       int64                           `json:"case_id"`
+	Code         string                          `json:"code"`
+	Quantity     int                             `json:"quantity"`
+	Formes       map[string]int                  `json:"formes"`
+	Marques      []string                        `json:"marques"`
+	Couleurs     []string                        `json:"couleurs"`
+	Matieres     []string                        `json:"matieres"`
+	Photos       []PreRegistrationPhoto          `json:"photos"`
+	Gamme        string                          `json:"gamme"`
+	Type         string                          `json:"type"`
+	Prix         float64                         `json:"prix"`
+	CreatedAt    time.Time                       `json:"created_at"`
+	UpdatedAt    time.Time                       `json:"updated_at"`
+	CaseCode     string                          `json:"valise_code"`
+	CaseCouleur  string                          `json:"valise_couleur"`
+	CaseGenre    string                          `json:"valise_genre"`
+	CaseMontures int                             `json:"valise_montures"`
+	Montures     []PreRegistrationCatalogueGlass `json:"montures"`
 }
 
 type PreRegistrationCatalogueGlass struct {
@@ -85,11 +85,11 @@ type PreRegistrationCatalogueGlass struct {
 }
 
 type PreRegistrationCatalogueFilters struct {
-	Query  string
-	Gamme  string
-	Genre  string
-	Type   string
-	Marque string
+	Query   string
+	Gamme   string
+	Genre   string
+	Type    string
+	Marque  string
 	Couleur string
 }
 

@@ -87,6 +87,10 @@ func (h *SendListHandler) Create(c *gin.Context) {
 				filtered = append(filtered, item)
 				continue
 			}
+			if strings.TrimSpace(item.Barcode) == "" && (strings.TrimSpace(item.Reference) != "" || strings.TrimSpace(item.LocationCode) != "") {
+				filtered = append(filtered, item)
+				continue
+			}
 			if code := strings.TrimSpace(item.Barcode); code != "" {
 				barcodes = append(barcodes, code)
 			}
