@@ -142,12 +142,13 @@ func (r *PreRegistrationRepository) ListCatalogueBoxes(filters models.PreRegistr
 		CaseCode    string         `db:"case_code"`
 		CaseCouleur string         `db:"case_couleur"`
 		CaseGenre   string         `db:"case_genre"`
+		CaseMontures int           `db:"case_montures"`
 		Montures    []byte         `db:"montures"`
 	}
 	err := r.db.Select(&rows, `
 		SELECT b.id, b.case_id, b.code, b.quantity, b.formes, b.marques, b.couleurs, b.matieres,
 		       b.photos, b.gamme, b.type_lunette, b.prix, b.created_at, b.updated_at,
-		       c.code AS case_code, c.couleur AS case_couleur, c.genre AS case_genre,
+		       c.code AS case_code, c.couleur AS case_couleur, c.genre AS case_genre, c.montures AS case_montures,
 		       COALESCE(jsonb_agg(jsonb_build_object(
 		           'id', g.id, 'reference', COALESCE(ga.reference, ''), 'barcode', g.barcode,
 		           'marque', COALESCE(ga.brand, ''), 'couleur', COALESCE(ga.color, ''),
@@ -198,7 +199,7 @@ func (r *PreRegistrationRepository) ListCatalogueBoxes(filters models.PreRegistr
 			ID: row.ID, CaseID: row.CaseID, Code: row.Code, Quantity: row.Quantity, Formes: formes,
 			Marques: []string(row.Marques), Couleurs: []string(row.Couleurs), Matieres: []string(row.Matieres), Photos: photos,
 			Gamme: row.Gamme, Type: row.Type, Prix: row.Prix, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-			CaseCode: row.CaseCode, CaseCouleur: row.CaseCouleur, CaseGenre: row.CaseGenre,
+			CaseCode: row.CaseCode, CaseCouleur: row.CaseCouleur, CaseGenre: row.CaseGenre, CaseMontures: row.CaseMontures,
 			Montures: montures,
 		}
 		if matchesCatalogueFilters(box, filters) {

@@ -70,6 +70,7 @@ type PreRegistrationCatalogueBox struct {
 	CaseCode    string                          `json:"valise_code"`
 	CaseCouleur string                          `json:"valise_couleur"`
 	CaseGenre   string                          `json:"valise_genre"`
+	CaseMontures int                            `json:"valise_montures"`
 	Montures    []PreRegistrationCatalogueGlass `json:"montures"`
 }
 
