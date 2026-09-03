@@ -32,8 +32,34 @@ func (h *PreRegistrationHandler) ListCases(c *gin.Context) {
 	shared.Success(c, http.StatusOK, gin.H{"cases": cases})
 }
 
+func extractCatalogueFilters(c *gin.Context) models.PreRegistrationCatalogueFilters {
+	queryValue := strings.TrimSpace(c.Query("q"))
+	if queryValue == "" {
+		queryValue = strings.TrimSpace(c.Query("search"))
+	}
+	return models.PreRegistrationCatalogueFilters{
+		Query:   queryValue,
+		Gamme:   firstNonEmpty(c.Query("gamme"), c.Query("fGamme")),
+		Genre:   firstNonEmpty(c.Query("genre"), c.Query("fGenre")),
+		Type:    firstNonEmpty(c.Query("type"), c.Query("fType")),
+		Marque:  firstNonEmpty(c.Query("marque"), c.Query("fMarque")),
+		Couleur: firstNonEmpty(c.Query("couleur"), c.Query("fCouleur")),
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func (h *PreRegistrationHandler) ListCatalogueBoxes(c *gin.Context) {
-	boxes, err := h.repo.ListCatalogueBoxes()
+	filters := extractCatalogueFilters(c)
+	boxes, err := h.repo.ListCatalogueBoxes(filters)
 	if err != nil {
 		shared.InternalError(c, "Impossible de récupérer les cartons du catalogue: "+err.Error())
 		return

@@ -83,6 +83,15 @@ type PreRegistrationCatalogueGlass struct {
 	Matiere   string `json:"matiere"`
 }
 
+type PreRegistrationCatalogueFilters struct {
+	Query  string
+	Gamme  string
+	Genre  string
+	Type   string
+	Marque string
+	Couleur string
+}
+
 type PreRegistrationBoxRequest struct {
 	Code        string                 `json:"code"`
 	Quantity    int                    `json:"qty"`

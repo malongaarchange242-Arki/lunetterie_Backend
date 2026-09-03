@@ -53,7 +53,77 @@ func (r *PreRegistrationRepository) ListCases(commandCode string) ([]models.PreR
 	return cases, nil
 }
 
-func (r *PreRegistrationRepository) ListCatalogueBoxes() ([]models.PreRegistrationCatalogueBox, error) {
+func normalizeCatalogueFilterValue(value string) string {
+	return strings.TrimSpace(strings.ToLower(value))
+}
+
+func matchesCatalogueFilters(box models.PreRegistrationCatalogueBox, filters models.PreRegistrationCatalogueFilters) bool {
+	if filters.Query != "" {
+		search := normalizeCatalogueFilterValue(filters.Query)
+		if search != "" {
+			textParts := []string{
+				box.Code,
+				box.CaseCode,
+				box.CaseCouleur,
+				box.CaseGenre,
+				box.Gamme,
+				box.Type,
+				strings.Join(box.Marques, " "),
+				strings.Join(box.Couleurs, " "),
+				strings.Join(box.Matieres, " "),
+			}
+			for _, m := range box.Montures {
+				textParts = append(textParts,
+					m.Reference,
+					m.Barcode,
+					m.Marque,
+					m.Couleur,
+					m.Forme,
+					m.Matiere,
+				)
+			}
+			joined := strings.ToLower(strings.Join(textParts, " "))
+			if !strings.Contains(joined, search) {
+				return false
+			}
+		}
+	}
+	if filters.Gamme != "" && !strings.EqualFold(strings.TrimSpace(box.Gamme), strings.TrimSpace(filters.Gamme)) {
+		return false
+	}
+	if filters.Genre != "" && !strings.EqualFold(strings.TrimSpace(box.CaseGenre), strings.TrimSpace(filters.Genre)) {
+		return false
+	}
+	if filters.Type != "" && !strings.EqualFold(strings.TrimSpace(box.Type), strings.TrimSpace(filters.Type)) {
+		return false
+	}
+	if filters.Couleur != "" && !strings.EqualFold(strings.TrimSpace(box.CaseCouleur), strings.TrimSpace(filters.Couleur)) {
+		return false
+	}
+	if filters.Marque != "" {
+		matched := false
+		for _, marque := range box.Marques {
+			if strings.EqualFold(strings.TrimSpace(marque), strings.TrimSpace(filters.Marque)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			for _, monture := range box.Montures {
+				if strings.EqualFold(strings.TrimSpace(monture.Marque), strings.TrimSpace(filters.Marque)) {
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *PreRegistrationRepository) ListCatalogueBoxes(filters models.PreRegistrationCatalogueFilters) ([]models.PreRegistrationCatalogueBox, error) {
 	var rows []struct {
 		ID          int64          `db:"id"`
 		CaseID      int64          `db:"case_id"`
@@ -124,13 +194,16 @@ func (r *PreRegistrationRepository) ListCatalogueBoxes() ([]models.PreRegistrati
 				return nil, fmt.Errorf("montures du carton invalides: %w", err)
 			}
 		}
-		boxes = append(boxes, models.PreRegistrationCatalogueBox{
+		box := models.PreRegistrationCatalogueBox{
 			ID: row.ID, CaseID: row.CaseID, Code: row.Code, Quantity: row.Quantity, Formes: formes,
 			Marques: []string(row.Marques), Couleurs: []string(row.Couleurs), Matieres: []string(row.Matieres), Photos: photos,
 			Gamme: row.Gamme, Type: row.Type, Prix: row.Prix, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 			CaseCode: row.CaseCode, CaseCouleur: row.CaseCouleur, CaseGenre: row.CaseGenre,
 			Montures: montures,
-		})
+		}
+		if matchesCatalogueFilters(box, filters) {
+			boxes = append(boxes, box)
+		}
 	}
 	return boxes, nil
 }

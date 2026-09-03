@@ -1,6 +1,39 @@
 package handlers
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+)
+
+func TestExtractCatalogueFiltersParsesFrontendFilterKeys(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/inventory/catalogue/pre-registration-boxes?q=Ray-Ban&fGamme=Classique&fGenre=Homme&fType=Vue&fMarque=Pacino&fCouleur=Noir", nil)
+
+	filters := extractCatalogueFilters(c)
+	if filters.Query != "Ray-Ban" {
+		t.Fatalf("expected query %q, got %q", "Ray-Ban", filters.Query)
+	}
+	if filters.Gamme != "Classique" {
+		t.Fatalf("expected gamme %q, got %q", "Classique", filters.Gamme)
+	}
+	if filters.Genre != "Homme" {
+		t.Fatalf("expected genre %q, got %q", "Homme", filters.Genre)
+	}
+	if filters.Type != "Vue" {
+		t.Fatalf("expected type %q, got %q", "Vue", filters.Type)
+	}
+	if filters.Marque != "Pacino" {
+		t.Fatalf("expected marque %q, got %q", "Pacino", filters.Marque)
+	}
+	if filters.Couleur != "Noir" {
+		t.Fatalf("expected couleur %q, got %q", "Noir", filters.Couleur)
+	}
+}
 
 func TestBuildPhotoStoragePathUsesUniqueNamePerPhoto(t *testing.T) {
 	pathA := buildPhotoStoragePath("VAL-016", "RO-20-001", "face", "p1", "IMG_0387.JPG")
