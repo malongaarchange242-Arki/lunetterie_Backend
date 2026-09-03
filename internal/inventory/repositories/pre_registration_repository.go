@@ -125,11 +125,9 @@ func (r *PreRegistrationRepository) ListCatalogueBoxes() ([]models.PreRegistrati
 			}
 		}
 		boxes = append(boxes, models.PreRegistrationCatalogueBox{
-			PreRegistrationBox: models.PreRegistrationBox{
-				ID: row.ID, CaseID: row.CaseID, Code: row.Code, Quantity: row.Quantity, Formes: formes,
-				Marques: []string(row.Marques), Couleurs: []string(row.Couleurs), Matieres: []string(row.Matieres), Photos: photos,
-				Gamme: row.Gamme, Type: row.Type, Prix: row.Prix, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-			},
+			ID: row.ID, CaseID: row.CaseID, Code: row.Code, Quantity: row.Quantity, Formes: formes,
+			Marques: []string(row.Marques), Couleurs: []string(row.Couleurs), Matieres: []string(row.Matieres), Photos: photos,
+			Gamme: row.Gamme, Type: row.Type, Prix: row.Prix, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 			CaseCode: row.CaseCode, CaseCouleur: row.CaseCouleur, CaseGenre: row.CaseGenre,
 			Montures: montures,
 		})
