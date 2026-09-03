@@ -256,9 +256,6 @@ func toValidationPayload(list models.SendList, items []models.SendListItem) gin.
 		origin = "admin"
 	}
 	status := mapValidationStatus(list.Status)
-	if origin == "admin" && status == "attente" {
-		status = "valide"
-	}
 
 	return gin.H{
 		"id":      list.ID,

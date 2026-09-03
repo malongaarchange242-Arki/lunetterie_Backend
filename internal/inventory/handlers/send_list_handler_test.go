@@ -76,7 +76,7 @@ func TestToValidationPayloadTagsAdminCreatedListsAsAdmin(t *testing.T) {
 	}
 }
 
-func TestToValidationPayloadMarksAdminCreatedListsAsValidated(t *testing.T) {
+func TestToValidationPayloadKeepsPendingStatusForAdminCreatedLists(t *testing.T) {
 	userID := int64(42)
 	list := models.SendList{
 		ID:          12,
@@ -88,8 +88,8 @@ func TestToValidationPayloadMarksAdminCreatedListsAsValidated(t *testing.T) {
 	}
 
 	payload := toValidationPayload(list, nil)
-	if got := payload["statut"]; got != "valide" {
-		t.Fatalf("expected statut %q for admin-created list, got %#v", "valide", got)
+	if got := payload["statut"]; got != "attente" {
+		t.Fatalf("expected statut %q for admin-created list, got %#v", "attente", got)
 	}
 }
 
